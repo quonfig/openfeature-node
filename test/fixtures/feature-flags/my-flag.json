@@ -1,0 +1,15 @@
+{
+  "id": "1",
+  "key": "my-flag",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "sendToClientSdk": true,
+  "default": {
+    "rules": [
+      {
+        "criteria": [{"operator": "ALWAYS_TRUE"}],
+        "value": {"type": "bool", "value": true}
+      }
+    ]
+  }
+}

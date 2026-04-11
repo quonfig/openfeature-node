@@ -1,0 +1,15 @@
+{
+  "id": "2",
+  "key": "my-string",
+  "type": "config",
+  "valueType": "string",
+  "sendToClientSdk": true,
+  "default": {
+    "rules": [
+      {
+        "criteria": [{"operator": "ALWAYS_TRUE"}],
+        "value": {"type": "string", "value": "hello"}
+      }
+    ]
+  }
+}
