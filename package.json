@@ -25,7 +25,7 @@
     "@openfeature/server-sdk": ">=1.0.0"
   },
   "devDependencies": {
-    "@quonfig/node": "file:../sdk-node",
+    "@quonfig/node": "^0.0.6",
     "@openfeature/server-sdk": "^1.7.0",
     "@types/node": "^20.11.0",
     "tsup": "^8.0.0",
