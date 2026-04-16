@@ -1,6 +1,6 @@
 {
   "name": "@quonfig/openfeature-node",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "OpenFeature provider for Quonfig -- Node.js",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -16,7 +16,8 @@
   "files": ["dist"],
   "scripts": {
     "build": "rm -rf dist/ && npx tsup",
-    "test": "vitest run",
+    "test": "vitest run --exclude test/conformance/**",
+    "test:conformance": "vitest run test/conformance",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
