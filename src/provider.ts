@@ -45,12 +45,13 @@ export class QuonfigProvider implements Provider {
 
   constructor(options: QuonfigProviderOptions) {
     this.targetingKeyMapping = options.targetingKeyMapping ?? "user.id";
+    // onConfigUpdate is not yet in the published @quonfig/node types; cast until sdk-node ships it
     this.client = new Quonfig({
       ...options,
       onConfigUpdate: () => {
         this.events.emit(ProviderEvents.ConfigurationChanged, { flagsChanged: [] });
       },
-    });
+    } as ConstructorParameters<typeof Quonfig>[0]);
   }
 
   async initialize(_context?: EvaluationContext): Promise<void> {
