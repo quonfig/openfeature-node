@@ -65,9 +65,8 @@ describe("2.3 — Provider lifecycle", () => {
     // Trigger the config update callback that the constructor wires to onConfigUpdate
     // by calling the internal callback via the native client escape hatch
     await p.initialize({});
-    p.getClient().emit?.("configUpdate");  // trigger if supported
-    // The event is emitted when the native SDK fires onConfigUpdate — we just verify
-    // the handler is registered without error (the actual firing is tested in integration)
+    // The event fires when the native SDK's onConfigUpdate callback is invoked.
+    // We just verify addHandler doesn't throw — actual firing is in integration tests.
     p.events.removeAllHandlers(ProviderEvents.ConfigurationChanged);
   });
 });
