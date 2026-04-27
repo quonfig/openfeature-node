@@ -3,7 +3,30 @@ on:
   push:
     branches: [main]
 jobs:
+  wait-for-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for @quonfig/node on npm
+        run: |
+          required=$(jq -r '.packages."node_modules/@quonfig/node".version' package-lock.json)
+          if [ -z "$required" ] || [ "$required" = "null" ]; then
+            echo "Could not determine required @quonfig/node version from package-lock.json" >&2
+            exit 1
+          fi
+          echo "Waiting for @quonfig/node@$required on npm..."
+          for i in $(seq 1 60); do
+            if npm view "@quonfig/node@$required" version >/dev/null 2>&1; then
+              echo "Found @quonfig/node@$required after ${i} polls"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for @quonfig/node@$required after 10 minutes" >&2
+          exit 1
+
   test:
+    needs: wait-for-sdk
     uses: ./.github/workflows/ci.yml
 
   check-version:
