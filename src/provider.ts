@@ -1,4 +1,5 @@
 import {
+  ErrorCode,
   EvaluationContext,
   JsonValue,
   Logger,
@@ -8,9 +9,8 @@ import {
   ResolutionDetails,
   StandardResolutionReasons,
 } from "@openfeature/server-sdk";
-import { Quonfig, QuonfigOptions } from "@quonfig/node";
+import { EvaluationDetails, Quonfig, QuonfigOptions } from "@quonfig/node";
 import { mapContext } from "./context.js";
-import { toErrorCode } from "./errors.js";
 
 export interface QuonfigProviderOptions extends Omit<QuonfigOptions, "onConfigUpdate"> {
   /**
@@ -68,20 +68,8 @@ export class QuonfigProvider implements Provider {
     _logger: Logger,
   ): Promise<ResolutionDetails<boolean>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
-    try {
-      const value = this.client.getBool(flagKey, mappedCtx);
-      if (value === undefined) {
-        return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT };
-      }
-      return { value, reason: StandardResolutionReasons.TARGETING_MATCH };
-    } catch (err) {
-      return {
-        value: defaultValue,
-        reason: StandardResolutionReasons.ERROR,
-        errorCode: toErrorCode(err),
-        errorMessage: err instanceof Error ? err.message : String(err),
-      };
-    }
+    const details = this.client.getBoolDetails(flagKey, mappedCtx);
+    return toResolutionDetails(details, defaultValue);
   }
 
   async resolveStringEvaluation(
@@ -91,20 +79,8 @@ export class QuonfigProvider implements Provider {
     _logger: Logger,
   ): Promise<ResolutionDetails<string>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
-    try {
-      const value = this.client.getString(flagKey, mappedCtx);
-      if (value === undefined) {
-        return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT };
-      }
-      return { value, reason: StandardResolutionReasons.TARGETING_MATCH };
-    } catch (err) {
-      return {
-        value: defaultValue,
-        reason: StandardResolutionReasons.ERROR,
-        errorCode: toErrorCode(err),
-        errorMessage: err instanceof Error ? err.message : String(err),
-      };
-    }
+    const details = this.client.getStringDetails(flagKey, mappedCtx);
+    return toResolutionDetails(details, defaultValue);
   }
 
   async resolveNumberEvaluation(
@@ -114,20 +90,8 @@ export class QuonfigProvider implements Provider {
     _logger: Logger,
   ): Promise<ResolutionDetails<number>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
-    try {
-      const value = this.client.getNumber(flagKey, mappedCtx);
-      if (value === undefined) {
-        return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT };
-      }
-      return { value, reason: StandardResolutionReasons.TARGETING_MATCH };
-    } catch (err) {
-      return {
-        value: defaultValue,
-        reason: StandardResolutionReasons.ERROR,
-        errorCode: toErrorCode(err),
-        errorMessage: err instanceof Error ? err.message : String(err),
-      };
-    }
+    const details = this.client.getNumberDetails(flagKey, mappedCtx);
+    return toResolutionDetails(details, defaultValue);
   }
 
   async resolveObjectEvaluation<T extends JsonValue>(
@@ -137,29 +101,20 @@ export class QuonfigProvider implements Provider {
     _logger: Logger,
   ): Promise<ResolutionDetails<T>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
-    try {
-      // Try string_list first (returns string[])
-      const listVal = this.client.getStringList(flagKey, mappedCtx);
-      if (listVal !== undefined) {
-        return {
-          value: listVal as unknown as T,
-          reason: StandardResolutionReasons.TARGETING_MATCH,
-        };
-      }
-      // Fall back to JSON
-      const jsonVal = this.client.getJSON(flagKey, mappedCtx);
-      if (jsonVal !== undefined) {
-        return { value: jsonVal as T, reason: StandardResolutionReasons.TARGETING_MATCH };
-      }
-      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT };
-    } catch (err) {
-      return {
-        value: defaultValue,
-        reason: StandardResolutionReasons.ERROR,
-        errorCode: toErrorCode(err),
-        errorMessage: err instanceof Error ? err.message : String(err),
-      };
+    // Try string_list first (returns string[]), fall back to JSON.
+    const listDetails = this.client.getStringListDetails(flagKey, mappedCtx);
+    if (
+      listDetails.reason === "STATIC" ||
+      listDetails.reason === "TARGETING_MATCH" ||
+      listDetails.reason === "SPLIT"
+    ) {
+      return toResolutionDetails(
+        listDetails as EvaluationDetails<unknown> as EvaluationDetails<T>,
+        defaultValue,
+      );
     }
+    const jsonDetails = this.client.getJSONDetails(flagKey, mappedCtx);
+    return toResolutionDetails(jsonDetails as EvaluationDetails<T>, defaultValue);
   }
 
   /**
@@ -168,5 +123,52 @@ export class QuonfigProvider implements Provider {
    */
   getClient(): Quonfig {
     return this.client;
+  }
+}
+
+/**
+ * Translate a Quonfig EvaluationDetails<T> into an OpenFeature ResolutionDetails<T>.
+ *
+ * Reason mapping (from the brief):
+ *   STATIC           → StandardResolutionReasons.STATIC
+ *   TARGETING_MATCH  → StandardResolutionReasons.TARGETING_MATCH
+ *   SPLIT            → StandardResolutionReasons.SPLIT
+ *   DEFAULT          → defaultValue + StandardResolutionReasons.DEFAULT
+ *   ERROR            → defaultValue + ERROR + errorCode (FLAG_NOT_FOUND / TYPE_MISMATCH / GENERAL)
+ */
+function toResolutionDetails<T>(
+  details: EvaluationDetails<T>,
+  defaultValue: T,
+): ResolutionDetails<T> {
+  switch (details.reason) {
+    case "STATIC":
+      return { value: details.value as T, reason: StandardResolutionReasons.STATIC };
+    case "TARGETING_MATCH":
+      return {
+        value: details.value as T,
+        reason: StandardResolutionReasons.TARGETING_MATCH,
+      };
+    case "SPLIT":
+      return { value: details.value as T, reason: StandardResolutionReasons.SPLIT };
+    case "DEFAULT":
+      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT };
+    case "ERROR":
+      return {
+        value: defaultValue,
+        reason: StandardResolutionReasons.ERROR,
+        errorCode: toOFErrorCode(details.errorCode),
+      };
+  }
+}
+
+function toOFErrorCode(code: EvaluationDetails<unknown>["errorCode"]): ErrorCode {
+  switch (code) {
+    case "FLAG_NOT_FOUND":
+      return ErrorCode.FLAG_NOT_FOUND;
+    case "TYPE_MISMATCH":
+      return ErrorCode.TYPE_MISMATCH;
+    case "GENERAL":
+    default:
+      return ErrorCode.GENERAL;
   }
 }

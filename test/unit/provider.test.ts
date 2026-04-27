@@ -2,23 +2,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ErrorCode, StandardResolutionReasons } from "@openfeature/server-sdk";
 import { QuonfigProvider } from "../../src/provider.js";
 
-// Mock @quonfig/node so we can control the client without a real server
+// Mock @quonfig/node so we can control the client without a real server.
+// The provider talks to the SDK via the *Details methods, so those are what
+// we mock here.
 const mockInit = vi.fn().mockResolvedValue(undefined);
 const mockClose = vi.fn();
-const mockGetBool = vi.fn();
-const mockGetString = vi.fn();
-const mockGetNumber = vi.fn();
-const mockGetStringList = vi.fn();
-const mockGetJSON = vi.fn();
+const mockGetBoolDetails = vi.fn();
+const mockGetStringDetails = vi.fn();
+const mockGetNumberDetails = vi.fn();
+const mockGetStringListDetails = vi.fn();
+const mockGetJSONDetails = vi.fn();
 
 const mockClientInstance = {
   init: mockInit,
   close: mockClose,
-  getBool: mockGetBool,
-  getString: mockGetString,
-  getNumber: mockGetNumber,
-  getStringList: mockGetStringList,
-  getJSON: mockGetJSON,
+  getBoolDetails: mockGetBoolDetails,
+  getStringDetails: mockGetStringDetails,
+  getNumberDetails: mockGetNumberDetails,
+  getStringListDetails: mockGetStringListDetails,
+  getJSONDetails: mockGetJSONDetails,
 };
 
 vi.mock("@quonfig/node", () => {
@@ -56,75 +58,115 @@ describe("QuonfigProvider", () => {
   });
 
   describe("resolveBooleanEvaluation", () => {
-    it("returns value and TARGETING_MATCH when flag found", async () => {
-      mockGetBool.mockReturnValue(true);
+    it("returns STATIC reason when SDK reports STATIC", async () => {
+      mockGetBoolDetails.mockReturnValue({ value: true, reason: "STATIC" });
+      const result = await provider.resolveBooleanEvaluation("my-flag", false, {}, {} as any);
+      expect(result.value).toBe(true);
+      expect(result.reason).toBe(StandardResolutionReasons.STATIC);
+    });
+
+    it("returns TARGETING_MATCH when SDK reports TARGETING_MATCH", async () => {
+      mockGetBoolDetails.mockReturnValue({ value: true, reason: "TARGETING_MATCH" });
       const result = await provider.resolveBooleanEvaluation("my-flag", false, {}, {} as any);
       expect(result.value).toBe(true);
       expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
     });
 
-    it("returns defaultValue and DEFAULT when flag returns undefined", async () => {
-      mockGetBool.mockReturnValue(undefined);
+    it("returns SPLIT when SDK reports SPLIT", async () => {
+      mockGetBoolDetails.mockReturnValue({ value: false, reason: "SPLIT" });
+      const result = await provider.resolveBooleanEvaluation("my-flag", true, {}, {} as any);
+      expect(result.value).toBe(false);
+      expect(result.reason).toBe(StandardResolutionReasons.SPLIT);
+    });
+
+    it("returns DEFAULT and defaultValue when SDK reports DEFAULT", async () => {
+      mockGetBoolDetails.mockReturnValue({ value: undefined, reason: "DEFAULT" });
       const result = await provider.resolveBooleanEvaluation("missing-flag", false, {}, {} as any);
       expect(result.value).toBe(false);
       expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
     });
 
-    it("returns defaultValue and ERROR when client throws", async () => {
-      mockGetBool.mockImplementation(() => {
-        throw new Error("not found");
+    it("returns ERROR + FLAG_NOT_FOUND when SDK reports FLAG_NOT_FOUND", async () => {
+      mockGetBoolDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "FLAG_NOT_FOUND",
       });
       const result = await provider.resolveBooleanEvaluation("bad-flag", false, {}, {} as any);
       expect(result.value).toBe(false);
       expect(result.reason).toBe(StandardResolutionReasons.ERROR);
       expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
     });
+
+    it("returns ERROR + TYPE_MISMATCH when SDK reports TYPE_MISMATCH", async () => {
+      mockGetBoolDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+      });
+      const result = await provider.resolveBooleanEvaluation("bad-flag", false, {}, {} as any);
+      expect(result.errorCode).toBe(ErrorCode.TYPE_MISMATCH);
+    });
+
+    it("returns ERROR + GENERAL when SDK reports GENERAL", async () => {
+      mockGetBoolDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "GENERAL",
+      });
+      const result = await provider.resolveBooleanEvaluation("bad-flag", false, {}, {} as any);
+      expect(result.errorCode).toBe(ErrorCode.GENERAL);
+    });
   });
 
   describe("resolveStringEvaluation", () => {
-    it("returns value and TARGETING_MATCH when flag found", async () => {
-      mockGetString.mockReturnValue("hello");
+    it("returns value and TARGETING_MATCH when SDK reports it", async () => {
+      mockGetStringDetails.mockReturnValue({ value: "hello", reason: "TARGETING_MATCH" });
       const result = await provider.resolveStringEvaluation("my-string", "", {}, {} as any);
       expect(result.value).toBe("hello");
       expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
     });
 
-    it("returns defaultValue and DEFAULT when flag returns undefined", async () => {
-      mockGetString.mockReturnValue(undefined);
+    it("returns DEFAULT when SDK reports DEFAULT", async () => {
+      mockGetStringDetails.mockReturnValue({ value: undefined, reason: "DEFAULT" });
       const result = await provider.resolveStringEvaluation("missing", "default-str", {}, {} as any);
       expect(result.value).toBe("default-str");
       expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
     });
 
-    it("returns defaultValue and ERROR when client throws", async () => {
-      mockGetString.mockImplementation(() => {
-        throw new Error("not initialized");
+    it("returns ERROR + FLAG_NOT_FOUND for missing flag", async () => {
+      mockGetStringDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "FLAG_NOT_FOUND",
       });
       const result = await provider.resolveStringEvaluation("flag", "fallback", {}, {} as any);
       expect(result.value).toBe("fallback");
       expect(result.reason).toBe(StandardResolutionReasons.ERROR);
-      expect(result.errorCode).toBe(ErrorCode.PROVIDER_NOT_READY);
+      expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
     });
   });
 
   describe("resolveNumberEvaluation", () => {
-    it("returns value and TARGETING_MATCH when flag found", async () => {
-      mockGetNumber.mockReturnValue(42);
+    it("returns value and TARGETING_MATCH when SDK reports it", async () => {
+      mockGetNumberDetails.mockReturnValue({ value: 42, reason: "TARGETING_MATCH" });
       const result = await provider.resolveNumberEvaluation("my-number", 0, {}, {} as any);
       expect(result.value).toBe(42);
       expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
     });
 
-    it("returns defaultValue and DEFAULT when flag returns undefined", async () => {
-      mockGetNumber.mockReturnValue(undefined);
+    it("returns DEFAULT when SDK reports DEFAULT", async () => {
+      mockGetNumberDetails.mockReturnValue({ value: undefined, reason: "DEFAULT" });
       const result = await provider.resolveNumberEvaluation("missing", 99, {}, {} as any);
       expect(result.value).toBe(99);
       expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
     });
 
-    it("returns defaultValue and ERROR when client throws", async () => {
-      mockGetNumber.mockImplementation(() => {
-        throw new Error("some error");
+    it("returns ERROR + GENERAL for general SDK errors", async () => {
+      mockGetNumberDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "GENERAL",
       });
       const result = await provider.resolveNumberEvaluation("bad", 0, {}, {} as any);
       expect(result.value).toBe(0);
@@ -134,24 +176,38 @@ describe("QuonfigProvider", () => {
   });
 
   describe("resolveObjectEvaluation", () => {
-    it("returns string_list value when getStringList succeeds", async () => {
-      mockGetStringList.mockReturnValue(["a", "b", "c"]);
+    it("returns string_list value when getStringListDetails resolves", async () => {
+      mockGetStringListDetails.mockReturnValue({
+        value: ["a", "b", "c"],
+        reason: "TARGETING_MATCH",
+      });
       const result = await provider.resolveObjectEvaluation("my-list", [], {}, {} as any);
       expect(result.value).toEqual(["a", "b", "c"]);
       expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
     });
 
-    it("falls back to getJSON when getStringList returns undefined", async () => {
-      mockGetStringList.mockReturnValue(undefined);
-      mockGetJSON.mockReturnValue({ key: "value" });
+    it("falls back to JSON when string_list is TYPE_MISMATCH", async () => {
+      mockGetStringListDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+      });
+      mockGetJSONDetails.mockReturnValue({
+        value: { key: "value" },
+        reason: "TARGETING_MATCH",
+      });
       const result = await provider.resolveObjectEvaluation("my-json", {}, {}, {} as any);
       expect(result.value).toEqual({ key: "value" });
       expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
     });
 
-    it("returns defaultValue and DEFAULT when both return undefined", async () => {
-      mockGetStringList.mockReturnValue(undefined);
-      mockGetJSON.mockReturnValue(undefined);
+    it("returns DEFAULT when both branches return DEFAULT", async () => {
+      mockGetStringListDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+      });
+      mockGetJSONDetails.mockReturnValue({ value: undefined, reason: "DEFAULT" });
       const result = await provider.resolveObjectEvaluation(
         "missing",
         { default: true },
@@ -162,27 +218,34 @@ describe("QuonfigProvider", () => {
       expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
     });
 
-    it("returns defaultValue and ERROR when client throws", async () => {
-      mockGetStringList.mockImplementation(() => {
-        throw new Error("type mismatch");
+    it("returns ERROR + FLAG_NOT_FOUND when both branches report FLAG_NOT_FOUND", async () => {
+      mockGetStringListDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "FLAG_NOT_FOUND",
+      });
+      mockGetJSONDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "FLAG_NOT_FOUND",
       });
       const result = await provider.resolveObjectEvaluation("bad", [], {}, {} as any);
       expect(result.value).toEqual([]);
       expect(result.reason).toBe(StandardResolutionReasons.ERROR);
-      expect(result.errorCode).toBe(ErrorCode.TYPE_MISMATCH);
+      expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
     });
   });
 
   describe("context mapping", () => {
-    it("passes mapped context to getBool", async () => {
-      mockGetBool.mockReturnValue(true);
+    it("passes mapped context to getBoolDetails", async () => {
+      mockGetBoolDetails.mockReturnValue({ value: true, reason: "TARGETING_MATCH" });
       await provider.resolveBooleanEvaluation(
         "my-flag",
         false,
         { targetingKey: "user-123", "user.plan": "pro" },
         {} as any,
       );
-      expect(mockGetBool).toHaveBeenCalledWith("my-flag", {
+      expect(mockGetBoolDetails).toHaveBeenCalledWith("my-flag", {
         user: { id: "user-123", plan: "pro" },
       });
     });
@@ -192,7 +255,7 @@ describe("QuonfigProvider", () => {
     it("returns the underlying Quonfig client", () => {
       const client = provider.getClient();
       expect(client).toBeDefined();
-      expect(typeof client.getBool).toBe("function");
+      expect(typeof client.getBoolDetails).toBe("function");
     });
   });
 });

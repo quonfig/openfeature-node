@@ -1,11 +1,9 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { OpenFeature } from "@openfeature/server-sdk";
 import { QuonfigProvider } from "../../src/provider.js";
-import { fileURLToPath } from "url";
-import { join, dirname } from "path";
+import { integrationTestDataDir } from "../helpers.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixturesDir = join(__dirname, "../fixtures");
+const fixturesDir = integrationTestDataDir();
 
 const provider = new QuonfigProvider({
   sdkKey: "test-sdk-key",
@@ -22,30 +20,36 @@ afterAll(async () => {
   await OpenFeature.close();
 });
 
-describe("QuonfigProvider integration (datadir mode)", () => {
-  it("resolves a boolean flag to true", async () => {
-    const value = await client.getBooleanValue("my-flag", false);
+describe("QuonfigProvider integration (datadir mode, integration-test-data fixtures)", () => {
+  it("resolves a STATIC boolean flag (always.true) to true", async () => {
+    const value = await client.getBooleanValue("always.true", false);
     expect(value).toBe(true);
   });
 
-  it("resolves a string config", async () => {
-    const value = await client.getStringValue("my-string", "");
-    expect(value).toBe("hello");
+  it("resolves a STATIC string config (brand.new.string)", async () => {
+    const value = await client.getStringValue("brand.new.string", "");
+    expect(value).toBe("hello.world");
   });
 
-  it("resolves a string_list as an object (array)", async () => {
-    const value = await client.getObjectValue("my-list", []);
-    expect(value).toEqual(["a", "b", "c"]);
-  });
-
-  it("resolves a boolean flag with targeting rule: pro user gets true", async () => {
-    const value = await client.getBooleanValue("plan-flag", false, { "user.plan": "pro" });
+  it("resolves a targeting rule for of.targeting: pro user gets true", async () => {
+    const value = await client.getBooleanValue("of.targeting", false, {
+      "user.plan": "pro",
+    });
     expect(value).toBe(true);
   });
 
-  it("resolves a boolean flag with targeting rule: free user gets false", async () => {
-    const value = await client.getBooleanValue("plan-flag", false, { "user.plan": "free" });
+  it("resolves of.targeting for free user falls through to false", async () => {
+    const value = await client.getBooleanValue("of.targeting", true, {
+      "user.plan": "free",
+    });
     expect(value).toBe(false);
+  });
+
+  it("resolves a weighted-value config (of.weighted) to one of the variants", async () => {
+    const value = await client.getStringValue("of.weighted", "fallback", {
+      targetingKey: "user-42",
+    });
+    expect(["variant-a", "variant-b"]).toContain(value);
   });
 
   it("returns default value for missing flags", async () => {

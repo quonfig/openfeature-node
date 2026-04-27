@@ -8,13 +8,40 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout openfeature-node
+        uses: actions/checkout@v4
+        with:
+          path: openfeature-node
+
+      - name: Checkout integration-test-data
+        uses: actions/checkout@v4
+        with:
+          repository: quonfig/integration-test-data
+          path: integration-test-data
+          ref: main
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run test:conformance
-      - run: npm run build
+          cache-dependency-path: openfeature-node/package-lock.json
+
+      - name: Install
+        working-directory: openfeature-node
+        run: npm ci
+
+      - name: Lint
+        working-directory: openfeature-node
+        run: npm run lint
+
+      - name: Test (unit + integration)
+        working-directory: openfeature-node
+        run: npm test
+
+      - name: Test (conformance)
+        working-directory: openfeature-node
+        run: npm run test:conformance
+
+      - name: Build
+        working-directory: openfeature-node
+        run: npm run build

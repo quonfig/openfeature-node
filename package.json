@@ -1,6 +1,6 @@
 {
   "name": "@quonfig/openfeature-node",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "OpenFeature provider for Quonfig -- Node.js",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -22,11 +22,11 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@quonfig/node": ">=0.0.6",
+    "@quonfig/node": ">=0.0.18",
     "@openfeature/server-sdk": ">=1.0.0"
   },
   "devDependencies": {
-    "@quonfig/node": "^0.0.7",
+    "@quonfig/node": "^0.0.18",
     "@openfeature/server-sdk": "^1.7.0",
     "@types/node": "^20.11.0",
     "tsup": "^8.0.0",
