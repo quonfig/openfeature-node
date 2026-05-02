@@ -6,7 +6,7 @@ import { QuonfigProvider } from "../../src/provider.js";
 // The provider talks to the SDK via the *Details methods, so those are what
 // we mock here.
 const mockInit = vi.fn().mockResolvedValue(undefined);
-const mockClose = vi.fn();
+const mockClose = vi.fn().mockResolvedValue(undefined);
 const mockGetBoolDetails = vi.fn();
 const mockGetStringDetails = vi.fn();
 const mockGetNumberDetails = vi.fn();
@@ -54,6 +54,31 @@ describe("QuonfigProvider", () => {
     it("calls client.close()", async () => {
       await provider.shutdown();
       expect(mockClose).toHaveBeenCalled();
+    });
+
+    // qfg-vrfm: shutdown() must await client.close() so the SDK's drain
+    // (close-drains-telemetry, qfg-vrfm + qfg-q3cx) actually completes
+    // before OpenFeature.close() resolves. If shutdown() returned before
+    // close() finished, buffered telemetry would still be dropped.
+    it("awaits client.close() before resolving (qfg-vrfm)", async () => {
+      let resolveClose!: () => void;
+      const closePromise = new Promise<void>((r) => {
+        resolveClose = r;
+      });
+      mockClose.mockReturnValueOnce(closePromise);
+
+      let shutdownResolved = false;
+      const shutdownPromise = provider.shutdown().then(() => {
+        shutdownResolved = true;
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(mockClose).toHaveBeenCalled();
+      expect(shutdownResolved).toBe(false);
+
+      resolveClose();
+      await shutdownPromise;
+      expect(shutdownResolved).toBe(true);
     });
   });
 
