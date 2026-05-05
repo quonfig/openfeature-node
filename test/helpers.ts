@@ -20,7 +20,7 @@ export function integrationTestDataDir(): string {
     throw new Error(
       `[openfeature-node tests] integration-test-data not found at ${dir}. ` +
         `Clone the integration-test-data repo as a sibling directory ` +
-        `to openfeature-node, mirroring the sdk-node test setup.`,
+        `to openfeature-node, mirroring the sdk-node test setup.`
     );
   }
   // Sanity: the datadir must contain quonfig.json

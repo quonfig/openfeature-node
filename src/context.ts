@@ -12,7 +12,7 @@ import type { Contexts, ContextValue } from "@quonfig/node";
  */
 export function mapContext(
   ofContext: EvaluationContext,
-  targetingKeyMapping = "user.id",
+  targetingKeyMapping = "user.id"
 ): Contexts {
   const result: Record<string, Record<string, ContextValue>> = {};
 

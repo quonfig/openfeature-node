@@ -4,7 +4,9 @@ import { toErrorCode } from "../../src/errors.js";
 
 describe("toErrorCode", () => {
   it("maps 'not found' message to FLAG_NOT_FOUND", () => {
-    expect(toErrorCode(new Error("No value found for key \"my-flag\""))).toBe(ErrorCode.FLAG_NOT_FOUND);
+    expect(toErrorCode(new Error('No value found for key "my-flag"'))).toBe(
+      ErrorCode.FLAG_NOT_FOUND
+    );
   });
 
   it("maps 'flag not found' message to FLAG_NOT_FOUND", () => {
@@ -17,7 +19,7 @@ describe("toErrorCode", () => {
 
   it("maps 'not initialized' message to PROVIDER_NOT_READY", () => {
     expect(toErrorCode(new Error("[quonfig] Not initialized. Call init() first."))).toBe(
-      ErrorCode.PROVIDER_NOT_READY,
+      ErrorCode.PROVIDER_NOT_READY
     );
   });
 

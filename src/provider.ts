@@ -65,7 +65,7 @@ export class QuonfigProvider implements Provider {
     flagKey: string,
     defaultValue: boolean,
     context: EvaluationContext,
-    _logger: Logger,
+    _logger: Logger
   ): Promise<ResolutionDetails<boolean>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getBoolDetails(flagKey, mappedCtx);
@@ -76,7 +76,7 @@ export class QuonfigProvider implements Provider {
     flagKey: string,
     defaultValue: string,
     context: EvaluationContext,
-    _logger: Logger,
+    _logger: Logger
   ): Promise<ResolutionDetails<string>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getStringDetails(flagKey, mappedCtx);
@@ -87,7 +87,7 @@ export class QuonfigProvider implements Provider {
     flagKey: string,
     defaultValue: number,
     context: EvaluationContext,
-    _logger: Logger,
+    _logger: Logger
   ): Promise<ResolutionDetails<number>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getNumberDetails(flagKey, mappedCtx);
@@ -98,7 +98,7 @@ export class QuonfigProvider implements Provider {
     flagKey: string,
     defaultValue: T,
     context: EvaluationContext,
-    _logger: Logger,
+    _logger: Logger
   ): Promise<ResolutionDetails<T>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     // Try string_list first (returns string[]), fall back to JSON.
@@ -110,7 +110,7 @@ export class QuonfigProvider implements Provider {
     ) {
       return toResolutionDetails(
         listDetails as EvaluationDetails<unknown> as EvaluationDetails<T>,
-        defaultValue,
+        defaultValue
       );
     }
     const jsonDetails = this.client.getJSONDetails(flagKey, mappedCtx);
@@ -138,7 +138,7 @@ export class QuonfigProvider implements Provider {
  */
 function toResolutionDetails<T>(
   details: EvaluationDetails<T>,
-  defaultValue: T,
+  defaultValue: T
 ): ResolutionDetails<T> {
   switch (details.reason) {
     case "STATIC":

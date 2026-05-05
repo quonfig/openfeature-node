@@ -154,7 +154,12 @@ describe("QuonfigProvider", () => {
 
     it("returns DEFAULT when SDK reports DEFAULT", async () => {
       mockGetStringDetails.mockReturnValue({ value: undefined, reason: "DEFAULT" });
-      const result = await provider.resolveStringEvaluation("missing", "default-str", {}, {} as any);
+      const result = await provider.resolveStringEvaluation(
+        "missing",
+        "default-str",
+        {},
+        {} as any
+      );
       expect(result.value).toBe("default-str");
       expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
     });
@@ -237,7 +242,7 @@ describe("QuonfigProvider", () => {
         "missing",
         { default: true },
         {},
-        {} as any,
+        {} as any
       );
       expect(result.value).toEqual({ default: true });
       expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
@@ -268,7 +273,7 @@ describe("QuonfigProvider", () => {
         "my-flag",
         false,
         { targetingKey: "user-123", "user.plan": "pro" },
-        {} as any,
+        {} as any
       );
       expect(mockGetBoolDetails).toHaveBeenCalledWith("my-flag", {
         user: { id: "user-123", plan: "pro" },

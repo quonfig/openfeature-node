@@ -7,8 +7,7 @@ import { ErrorCode } from "@openfeature/server-sdk";
  * the lowercased message.
  */
 export function toErrorCode(err: unknown): ErrorCode {
-  const msg =
-    err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
 
   if (
     msg.includes("not found") ||

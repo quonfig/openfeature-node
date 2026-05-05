@@ -3,11 +3,7 @@
 // validating the OF spec contract without depending on the OpenFeature singleton.
 // References: https://openfeature.dev/specification/sections/providers
 import { describe, it, expect, beforeAll } from "vitest";
-import {
-  ErrorCode,
-  ProviderEvents,
-  StandardResolutionReasons,
-} from "@openfeature/server-sdk";
+import { ErrorCode, ProviderEvents, StandardResolutionReasons } from "@openfeature/server-sdk";
 import { QuonfigProvider } from "../../src/provider.js";
 import { integrationTestDataDir } from "../helpers.js";
 
@@ -74,7 +70,12 @@ describe("2.2 — Error codes", () => {
   });
 
   it("2.2.2: returns FLAG_NOT_FOUND for missing string flag", async () => {
-    const result = await provider.resolveStringEvaluation("does-not-exist", "fallback", {}, {} as any);
+    const result = await provider.resolveStringEvaluation(
+      "does-not-exist",
+      "fallback",
+      {},
+      {} as any
+    );
     expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
   });
 
@@ -100,12 +101,21 @@ describe("2.2 — Error codes", () => {
 // ---------------------------------------------------------------------------
 describe("2.1 — Default value on error", () => {
   it("returns boolean default for missing flag", async () => {
-    expect((await provider.resolveBooleanEvaluation("does-not-exist", true, {}, {} as any)).value).toBe(true);
-    expect((await provider.resolveBooleanEvaluation("does-not-exist", false, {}, {} as any)).value).toBe(false);
+    expect(
+      (await provider.resolveBooleanEvaluation("does-not-exist", true, {}, {} as any)).value
+    ).toBe(true);
+    expect(
+      (await provider.resolveBooleanEvaluation("does-not-exist", false, {}, {} as any)).value
+    ).toBe(false);
   });
 
   it("returns string default for missing flag", async () => {
-    const result = await provider.resolveStringEvaluation("does-not-exist", "sentinel", {}, {} as any);
+    const result = await provider.resolveStringEvaluation(
+      "does-not-exist",
+      "sentinel",
+      {},
+      {} as any
+    );
     expect(result.value).toBe("sentinel");
   });
 
@@ -142,7 +152,7 @@ describe("2.7 — Resolution reasons", () => {
       "of.targeting",
       false,
       { "user.plan": "pro" },
-      {} as any,
+      {} as any
     );
     expect(result.value).toBe(true);
     expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
@@ -158,7 +168,7 @@ describe("2.7 — Resolution reasons", () => {
         "of.weighted",
         "fallback",
         { targetingKey: `user-${i}` },
-        {} as any,
+        {} as any
       );
       expect(["variant-a", "variant-b"]).toContain(result.value);
       if (result.reason === StandardResolutionReasons.SPLIT) sawSplit = true;
@@ -201,7 +211,7 @@ describe("3.2 — Evaluation context", () => {
       "of.targeting",
       false,
       { "user.plan": "pro" },
-      {} as any,
+      {} as any
     );
     expect(result.value).toBe(true);
     expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
@@ -212,7 +222,7 @@ describe("3.2 — Evaluation context", () => {
       "of.targeting",
       true,
       { "user.plan": "free" },
-      {} as any,
+      {} as any
     );
     expect(result.value).toBe(false);
     expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
@@ -223,7 +233,7 @@ describe("3.2 — Evaluation context", () => {
       "of.targeting",
       false,
       { targetingKey: "user-123", "user.plan": "pro" },
-      {} as any,
+      {} as any
     );
     expect(result.value).toBe(true);
   });

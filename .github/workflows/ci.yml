@@ -34,6 +34,10 @@ jobs:
         working-directory: openfeature-node
         run: npm run lint
 
+      - name: Run formatter
+        working-directory: openfeature-node
+        run: npm run prettier
+
       - name: Test (unit + integration)
         working-directory: openfeature-node
         run: npm test
