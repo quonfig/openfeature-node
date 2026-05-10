@@ -288,4 +288,72 @@ describe("QuonfigProvider", () => {
       expect(typeof client.getBoolDetails).toBe("function");
     });
   });
+
+  describe("variant + flagMetadata forwarding (qfg-9dbl)", () => {
+    it("forwards variant + flagMetadata from SDK on STATIC", async () => {
+      mockGetBoolDetails.mockReturnValue({
+        value: true,
+        reason: "STATIC",
+        variant: "static",
+        flagMetadata: {
+          configId: "abc",
+          configType: "FEATURE_FLAG",
+          environment: "Production",
+        },
+      });
+      const result = await provider.resolveBooleanEvaluation("k", false, {}, {} as any);
+      expect(result.variant).toBe("static");
+      expect(result.flagMetadata).toEqual({
+        configId: "abc",
+        configType: "FEATURE_FLAG",
+        environment: "Production",
+      });
+    });
+
+    it("forwards variant + flagMetadata + ruleIndex on TARGETING_MATCH", async () => {
+      mockGetStringDetails.mockReturnValue({
+        value: "v",
+        reason: "TARGETING_MATCH",
+        variant: "targeting:0",
+        flagMetadata: { configId: "id1", configType: "CONFIG", ruleIndex: 0 },
+      });
+      const result = await provider.resolveStringEvaluation("k", "", {}, {} as any);
+      expect(result.variant).toBe("targeting:0");
+      expect((result.flagMetadata as Record<string, unknown>).ruleIndex).toBe(0);
+    });
+
+    it("forwards variant + weightedValueIndex on SPLIT", async () => {
+      mockGetStringDetails.mockReturnValue({
+        value: "variant-b",
+        reason: "SPLIT",
+        variant: "split:1",
+        flagMetadata: {
+          configId: "id1",
+          configType: "CONFIG",
+          ruleIndex: 0,
+          weightedValueIndex: 1,
+        },
+      });
+      const result = await provider.resolveStringEvaluation("k", "", {}, {} as any);
+      expect(result.variant).toBe("split:1");
+      const md = result.flagMetadata as Record<string, unknown>;
+      expect(md.weightedValueIndex).toBe(1);
+      expect(md.ruleIndex).toBe(0);
+    });
+
+    it("forwards errorMessage + variant='default' on ERROR", async () => {
+      mockGetBoolDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "FLAG_NOT_FOUND",
+        errorMessage: "No config found",
+        variant: "default",
+        flagMetadata: {},
+      });
+      const result = await provider.resolveBooleanEvaluation("missing", false, {}, {} as any);
+      expect(result.variant).toBe("default");
+      expect(result.errorMessage).toBe("No config found");
+      expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
+    });
+  });
 });

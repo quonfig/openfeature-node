@@ -140,23 +140,42 @@ function toResolutionDetails<T>(
   details: EvaluationDetails<T>,
   defaultValue: T
 ): ResolutionDetails<T> {
+  const common = {
+    variant: details.variant,
+    flagMetadata: details.flagMetadata as ResolutionDetails<T>["flagMetadata"],
+  };
   switch (details.reason) {
     case "STATIC":
-      return { value: details.value as T, reason: StandardResolutionReasons.STATIC };
+      return {
+        value: details.value as T,
+        reason: StandardResolutionReasons.STATIC,
+        ...common,
+      };
     case "TARGETING_MATCH":
       return {
         value: details.value as T,
         reason: StandardResolutionReasons.TARGETING_MATCH,
+        ...common,
       };
     case "SPLIT":
-      return { value: details.value as T, reason: StandardResolutionReasons.SPLIT };
+      return {
+        value: details.value as T,
+        reason: StandardResolutionReasons.SPLIT,
+        ...common,
+      };
     case "DEFAULT":
-      return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT };
+      return {
+        value: defaultValue,
+        reason: StandardResolutionReasons.DEFAULT,
+        ...common,
+      };
     case "ERROR":
       return {
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
         errorCode: toOFErrorCode(details.errorCode),
+        errorMessage: details.errorMessage,
+        ...common,
       };
   }
 }

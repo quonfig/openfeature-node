@@ -61,4 +61,76 @@ describe("QuonfigProvider integration (datadir mode, integration-test-data fixtu
     const value = await client.getStringValue("does-not-exist", "fallback");
     expect(value).toBe("fallback");
   });
+
+  describe("variant + flagMetadata (qfg-9dbl)", () => {
+    it("STATIC: variant='static', flagMetadata has configId/configType/environment", async () => {
+      const details = await client.getBooleanDetails("always.true", false);
+      expect(details.value).toBe(true);
+      expect(details.reason).toBe("STATIC");
+      expect(details.variant).toBe("static");
+      const md = details.flagMetadata as Record<string, unknown>;
+      expect(typeof md.configId).toBe("string");
+      expect(md.configType).toBe("FEATURE_FLAG");
+      expect(md.environment).toBe("Production");
+      expect(md.ruleIndex).toBeUndefined();
+      expect(md.weightedValueIndex).toBeUndefined();
+    });
+
+    it("TARGETING_MATCH: variant='targeting:0', flagMetadata.ruleIndex=0", async () => {
+      const details = await client.getBooleanDetails("of.targeting", false, {
+        "user.plan": "pro",
+      });
+      expect(details.value).toBe(true);
+      expect(details.reason).toBe("TARGETING_MATCH");
+      expect(details.variant).toBe("targeting:0");
+      const md = details.flagMetadata as Record<string, unknown>;
+      expect(md.configId).toBe("18000000000000001");
+      expect(md.configType).toBe("CONFIG");
+      expect(md.ruleIndex).toBe(0);
+      expect(md.weightedValueIndex).toBeUndefined();
+    });
+
+    it("SPLIT: variant='split:<n>' matches flagMetadata.weightedValueIndex", async () => {
+      let saw: { variant?: string; md?: Record<string, unknown> } | undefined;
+      for (let i = 0; i < 100; i++) {
+        const d = await client.getStringDetails("of.weighted", "fallback", {
+          targetingKey: `user-${i}`,
+        });
+        if (d.reason === "SPLIT") {
+          saw = { variant: d.variant, md: d.flagMetadata as Record<string, unknown> };
+          break;
+        }
+      }
+      expect(saw).toBeDefined();
+      expect(saw!.variant).toMatch(/^split:[0-9]+$/);
+      expect(saw!.md!.weightedValueIndex).toBe(Number(saw!.variant!.split(":")[1]));
+      expect(typeof saw!.md!.ruleIndex).toBe("number");
+    });
+
+    it("ERROR FLAG_NOT_FOUND: errorMessage set (OF client strips variant on error)", async () => {
+      // Note: the OpenFeature JS server-sdk strips `variant` from the
+      // EvaluationDetails on the error path (see getErrorEvaluationDetails
+      // in @openfeature/server-sdk). The provider does set variant='default'
+      // on its ResolutionDetails — see the unit test in test/unit/provider.test.ts.
+      const details = await client.getBooleanDetails("does-not-exist", false);
+      expect(details.reason).toBe("ERROR");
+      expect(details.errorCode).toBe("FLAG_NOT_FOUND");
+      expect(typeof details.errorMessage).toBe("string");
+    });
+
+    it("ERROR FLAG_NOT_FOUND: provider's ResolutionDetails has variant='default'", async () => {
+      // Direct provider call — bypass the OF client error-wrapping so we can
+      // assert the provider does forward the variant.
+      const result = await provider.resolveBooleanEvaluation(
+        "does-not-exist",
+        false,
+        {},
+        {} as never
+      );
+      expect(result.reason).toBe("ERROR");
+      expect(result.errorCode).toBe("FLAG_NOT_FOUND");
+      expect(result.variant).toBe("default");
+      expect(typeof result.errorMessage).toBe("string");
+    });
+  });
 });
