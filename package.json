@@ -1,6 +1,6 @@
 {
   "name": "@quonfig/openfeature-node",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "OpenFeature provider for Quonfig -- Node.js",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -25,11 +25,11 @@
     "version": "prettier --write CHANGELOG.md README.md && git add CHANGELOG.md README.md"
   },
   "peerDependencies": {
-    "@quonfig/node": ">=0.0.26",
+    "@quonfig/node": ">=0.0.28",
     "@openfeature/server-sdk": ">=1.0.0"
   },
   "devDependencies": {
-    "@quonfig/node": "^0.0.26",
+    "@quonfig/node": "^0.0.28",
     "@openfeature/server-sdk": "^1.7.0",
     "@types/node": "^20.11.0",
     "prettier": "^3.0.0",
