@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.8 - 2026-05-21
+
+- Bump `@quonfig/node` to `0.0.33`. Both the peer floor (`>=0.0.28` -> `>=0.0.33`) and the dev pin
+  (`^0.0.28` -> `^0.0.33`) are bumped because npm interprets `^0.0.x` as `>=0.0.x <0.0.(x+1)` on
+  `0.0.x` semver, so the old caret would not have picked up `0.0.33`. No provider code changes.
+
 ## 0.0.7 - 2026-05-14
 
 - Forward `variant`, `flagMetadata`, and `errorMessage` from the native SDK's `EvaluationDetails`
