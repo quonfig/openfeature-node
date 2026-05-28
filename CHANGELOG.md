@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.9 - 2026-05-28
+
+- Bump `@quonfig/node` to `0.0.34` (sdk-1.0-unification). Both the peer floor (`>=0.0.33` ->
+  `>=0.0.34`) and the dev pin (`^0.0.33` -> `^0.0.34`) are bumped because npm interprets `^0.0.x` as
+  `>=0.0.x <0.0.(x+1)` on `0.0.x` semver, so the old caret would not have picked up `0.0.34`. No
+  provider code changes.
+
 ## 0.0.8 - 2026-05-21
 
 - Bump `@quonfig/node` to `0.0.33`. Both the peer floor (`>=0.0.28` -> `>=0.0.33`) and the dev pin
