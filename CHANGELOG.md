@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.10 - 2026-06-02
+
+- Bump the `@quonfig/node` peer and dev dependency floor from `0.0.34` to `0.0.36` to inherit
+  dev-context injection default-on (qfg-bw7g.9, via qfg-bw7g.2). No change to this provider's
+  behavior — dev-context lives below the OpenFeature layer, so OpenFeature users now get
+  `quonfig-user.email` injection by default in local dev (gated on the `qfg login` token file; inert
+  in production).
+
 ## 0.0.9 - 2026-05-28
 
 - Bump `@quonfig/node` to `0.0.34` (sdk-1.0-unification). Both the peer floor (`>=0.0.33` ->
