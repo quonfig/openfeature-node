@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0 - 2026-06-06
+
+- **Stable 1.0.0 release.** The Quonfig OpenFeature provider for Node.js is now declared stable and
+  tracks `@quonfig/node` >= 1.0.0. No API or behavior changes from 0.0.10 — this is a coordinated
+  1.0.0 version stamp across the entire Quonfig SDK family.
+
 ## 0.0.10 - 2026-06-02
 
 - Bump the `@quonfig/node` peer and dev dependency floor from `0.0.34` to `0.0.36` to inherit
