@@ -78,7 +78,7 @@ const native = provider.getClient();
 
 // Log level integration
 const shouldLog = native.shouldLog({
-  loggerName: "auth",
+  configKey: "log-level.auth",
   desiredLevel: "DEBUG",
   contexts: { user: { id: "user-123" } },
 });
