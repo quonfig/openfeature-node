@@ -29,7 +29,7 @@
     "@openfeature/server-sdk": ">=1.0.0"
   },
   "devDependencies": {
-    "@quonfig/node": "^1.0.0",
+    "@quonfig/node": "^1.4.0",
     "@openfeature/server-sdk": "^1.7.0",
     "@types/node": "^20.11.0",
     "prettier": "^3.0.0",
