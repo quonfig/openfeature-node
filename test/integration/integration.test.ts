@@ -90,21 +90,19 @@ describe("QuonfigProvider integration (datadir mode, integration-test-data fixtu
       expect(md.weightedValueIndex).toBeUndefined();
     });
 
-    it("SPLIT: variant='split:<n>' matches flagMetadata.weightedValueIndex", async () => {
-      let saw: { variant?: string; md?: Record<string, unknown> } | undefined;
-      for (let i = 0; i < 100; i++) {
-        const d = await client.getStringDetails("of.weighted", "fallback", {
-          targetingKey: `user-${i}`,
-        });
-        if (d.reason === "SPLIT") {
-          saw = { variant: d.variant, md: d.flagMetadata as Record<string, unknown> };
-          break;
-        }
-      }
-      expect(saw).toBeDefined();
-      expect(saw!.variant).toMatch(/^split:[0-9]+$/);
-      expect(saw!.md!.weightedValueIndex).toBe(Number(saw!.variant!.split(":")[1]));
-      expect(typeof saw!.md!.ruleIndex).toBe("number");
+    it("SPLIT: bucket 0 reports variant='split:0' and flagMetadata.weightedValueIndex=0", async () => {
+      // targetingKey "user-123" deterministically lands in bucket 0 (variant-a);
+      // see integration-test-data tests/openfeature/openfeature.yaml Case 5.
+      // Bucket 0 must still be SPLIT, not STATIC (qfg-stbb).
+      const d = await client.getStringDetails("of.weighted", "fallback", {
+        targetingKey: "user-123",
+      });
+      expect(d.value).toBe("variant-a");
+      expect(d.reason).toBe("SPLIT");
+      expect(d.variant).toBe("split:0");
+      const md = d.flagMetadata as Record<string, unknown>;
+      expect(md.weightedValueIndex).toBe(0);
+      expect(typeof md.ruleIndex).toBe("number");
     });
 
     it("ERROR FLAG_NOT_FOUND: errorMessage set (OF client strips variant on error)", async () => {

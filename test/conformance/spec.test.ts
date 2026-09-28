@@ -159,21 +159,20 @@ describe("2.7 — Resolution reasons", () => {
   });
 
   it("returns SPLIT for of.weighted (weighted_values config)", async () => {
-    // The weighted config is 50/50 on user.id. To deterministically hit the
-    // SPLIT branch (computeReason returns STATIC for weightedValueIndex==0),
-    // try a handful of user IDs until we land on a non-zero index.
-    let sawSplit = false;
-    for (let i = 0; i < 50 && !sawSplit; i++) {
-      const result = await provider.resolveStringEvaluation(
-        "of.weighted",
-        "fallback",
-        { targetingKey: `user-${i}` },
-        {} as any
-      );
-      expect(["variant-a", "variant-b"]).toContain(result.value);
-      if (result.reason === StandardResolutionReasons.SPLIT) sawSplit = true;
-    }
-    expect(sawSplit).toBe(true);
+    // of.weighted is 50/50 on user.id. targetingKey "user-123" deterministically
+    // lands in bucket 0 (variant-a) -- see integration-test-data
+    // tests/openfeature/openfeature.yaml Case 5. Bucket 0 is still a weighted
+    // split and must report SPLIT, not STATIC (qfg-stbb).
+    const result = await provider.resolveStringEvaluation(
+      "of.weighted",
+      "fallback",
+      { targetingKey: "user-123" },
+      {} as any
+    );
+    expect(result.value).toBe("variant-a");
+    expect(result.reason).toBe(StandardResolutionReasons.SPLIT);
+    expect(result.variant).toBe("split:0");
+    expect((result.flagMetadata as Record<string, unknown>).weightedValueIndex).toBe(0);
   });
 
   it("returns ERROR reason for missing flag", async () => {
