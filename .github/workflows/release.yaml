@@ -28,7 +28,9 @@ jobs:
   test:
     needs: wait-for-sdk
     uses: ./.github/workflows/ci.yml
-    secrets: inherit
+    # Same-repo reusable workflow, reviewed with this file (Semgrep p/ci
+    # secrets-inherit is aimed at third-party callees).
+    secrets: inherit # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
 
   check-version:
     runs-on: ubuntu-latest
