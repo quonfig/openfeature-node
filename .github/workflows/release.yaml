@@ -6,7 +6,7 @@ jobs:
   wait-for-sdk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Wait for @quonfig/node on npm
         run: |
           required=$(jq -r '.packages."node_modules/@quonfig/node".version' package-lock.json)
@@ -41,7 +41,7 @@ jobs:
       is-prerelease: ${{ steps.check.outputs.is-prerelease }}
       npm-tag: ${{ steps.check.outputs.npm-tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check if version needs publishing
         id: check
         run: |
@@ -69,7 +69,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
