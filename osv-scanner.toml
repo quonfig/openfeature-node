@@ -1,0 +1,23 @@
+# osv-scanner ignores for the SSDLC dependency gate (ssdlc / deps).
+# Every entry needs a reason; past ignoreUntil it is enforced again.
+# See https://github.com/quonfig/ci (README, "Ignoring a finding").
+
+[[IgnoredVulns]]
+id = "GHSA-5xrq-8626-4rwp"
+ignoreUntil = 2027-01-31
+reason = "vitest 1.6.1 (dev only, not in the published package). Needs the Vitest UI/API server exposed to the network on Windows; CI and local runs use `vitest run` with no UI. Fixed only in 3.2.6+/4.1.0, a major bump tracked in qfg-66ko.5."
+
+[[IgnoredVulns]]
+id = "GHSA-5gmw-xhrv-c9v3"
+ignoreUntil = 2027-01-31
+reason = "tinypool 0.8.4, pulled in by vitest 1.x (dev only). Exploit needs a prototype-pollution primitive inside the test process. Fixed in tinypool 2.x, reachable only through the vitest major bump tracked in qfg-66ko.5."
+
+[[IgnoredVulns]]
+id = "GHSA-85c8-ppgw-ccpr"
+ignoreUntil = 2027-01-31
+reason = "tinypool 0.8.4, pulled in by vitest 1.x (dev only). Same prototype-pollution gadget class as GHSA-5gmw-xhrv-c9v3. Fixed in tinypool 2.x via the vitest major bump tracked in qfg-66ko.5."
+
+[[IgnoredVulns]]
+id = "GHSA-fx2h-pf6j-xcff"
+ignoreUntil = 2027-01-31
+reason = "vite 5.4.21, pulled in by vitest 1.x (dev only). server.fs.deny bypass needs a network-exposed Vite dev server on Windows; this repo never runs a Vite dev server (tsup builds, vitest runs headless). No 5.x fix; cleared by the vitest major bump tracked in qfg-66ko.5."
