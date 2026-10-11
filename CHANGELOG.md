@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 - 2026-10-09
+
+- Raise the `@quonfig/node` peer floor from `>=1.0.0` to `>=1.6.0` (dev pin `^1.6.0`) so provider
+  users inherit sdk-node 1.6.0: `isEnabled()` on a missing key returns false, confidential
+  ENV_VAR-provided values are redacted in telemetry, init/telemetry/decrypt hardening (qfg-goi1.3,
+  qfg-goi1.2.47, qfg-goi1.2.5, qfg-goi1.1.2, qfg-goi1.2.20). No change to this provider's behavior.
+
 ## 1.0.0 - 2026-06-06
 
 - **Stable 1.0.0 release.** The Quonfig OpenFeature provider for Node.js is now declared stable and
