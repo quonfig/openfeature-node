@@ -7,10 +7,11 @@ silent breaking change to its public API is the costliest mistake. This is NOT a
 Look only for problems that are obvious from the diff:
 
 1. Public API and semver breakage: exported functions, classes, types or option fields renamed,
-   removed or made stricter; changes to package.json `exports`, `main` or `types`. Also flag behaviour changes on the common path that callers would notice:
-   different default values, different OpenFeature reasons or error codes, a different flag-type
-   mapping, or a method that used to return a default now throwing. Flag these as BLOCK unless the
-   diff also bumps the major version.
+   removed or made stricter; changes to package.json `exports`, `main` or `types`. Also flag
+   behaviour changes on the common path that callers would notice: different default values,
+   different OpenFeature reasons or error codes, a different flag-type mapping, or a method that
+   used to return a default now throwing. Flag these as BLOCK unless the diff also bumps the major
+   version.
 2. Obvious TypeScript bugs: a missing `await` on a promise whose result is used, unhandled promise
    rejections, null or undefined dereference, a broken import or export, inverted conditions, wrong
    variable, unreachable code.
