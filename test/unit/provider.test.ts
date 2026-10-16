@@ -25,7 +25,10 @@ const mockClientInstance = {
 
 vi.mock("@quonfig/node", () => {
   return {
-    Quonfig: vi.fn(() => mockClientInstance),
+    // `function` (not an arrow) so vitest 4 can call it with `new`.
+    Quonfig: vi.fn(function () {
+      return mockClientInstance;
+    }),
   };
 });
 
