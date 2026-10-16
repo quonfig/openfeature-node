@@ -9,12 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout openfeature-node
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: openfeature-node
 
       - name: Checkout integration-test-data
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: quonfig/integration-test-data
           path: integration-test-data
