@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.2 - 2026-10-16
+
+- Raise the `@quonfig/node` dev pin from `^1.6.0` to `^1.7.0` so this provider is built and tested
+  against sdk-node 1.7.0. The peer floor stays `>=1.6.0`: the provider calls only `init()`,
+  `close()` and the `get*Details()` methods, all present in 1.6.0, so 1.7.0 is not required. No
+  change to this provider's code or behavior. Provider users who install or upgrade to
+  `@quonfig/node` 1.7.0 inherit (qfg-goi1):
+  - A rejected SDK key (401/403/404/410 on the primary leg of a failed poll cycle) slows to one
+    probe every 150-300s and logs one ERROR naming the status and host, instead of retrying at the
+    normal cadence (qfg-goi1.10.24).
+  - `PROP_BEFORE` / `PROP_AFTER` accept only epoch ms (number or all-digit string) or RFC3339 with
+    `Z` or an offset. UPGRADE: pass dates as epoch ms or ISO 8601 with Z/offset; a context date such
+    as `"2024-11-01"` or `"2024-11-01T00:00:00"` no longer matches (qfg-goi1.5.6).
+  - `PROP_SEMVER_*` reads abbreviated versions (`"2"`, `"2.0"`) as `2.0.0`. UPGRADE: changes who
+    matches; a context such as `appVersion: "4.1"` can now match semver rules (qfg-goi1.5.6).
+  - Object resolutions backed by a json config return a fresh copy on every call, so mutating the
+    resolved value no longer rewrites the config for later reads (qfg-goi1.10.1).
+  - One malformed config entry in a payload is skipped with a WARN instead of rejecting the whole
+    payload; the skipped key resolves as `FLAG_NOT_FOUND` (qfg-goi1.10.1).
+  - An int/double ENV_VAR coercion error no longer echoes the env var's contents into
+    `errorMessage`, which this provider forwards to OpenFeature (qfg-goi1.2.31).
+
 ## 1.0.1 - 2026-10-09
 
 - Raise the `@quonfig/node` peer floor from `>=1.0.0` to `>=1.6.0` (dev pin `^1.6.0`) so provider
