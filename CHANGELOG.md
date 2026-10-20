@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.3 - 2026-10-20
+
+- Raise the `@quonfig/node` dev pin from `^1.7.0` to `^1.8.0` so this provider is built and tested
+  against sdk-node 1.8.0. The peer floor stays `>=1.6.0`: the provider calls only `init()`,
+  `close()` and the `get*Details()` methods, all present in 1.6.0, so 1.8.0 is not required. No
+  change to this provider's code or behavior. Provider users who install or upgrade to
+  `@quonfig/node` 1.8.0 inherit (qfg-goi1):
+  - UPGRADE: the SSE stream counts as connected at its first valid frame (a config envelope or a
+    keepalive), not at the 200 response headers (qfg-goi1.10.9, qfg-goi1.10.40). Against Quonfig's
+    servers both arrive together, so you should see no difference. Behind a proxy that sends 200
+    headers early, the native client's `connectionState()` and `onSSEConnectionStateChange` report
+    `connected` up to one keepalive interval (30 s) later. A stream that closes before any frame is
+    now a failed attempt: the reconnect delay grows and the fallback poller takes over, instead of
+    reconnecting in a tight loop on stale config. This provider does not map connection state to
+    OpenFeature events, so `Ready` and `ConfigurationChanged` fire as before.
+  - Evaluation-summary telemetry no longer serializes the selected value on every evaluation. A
+    large JSON or string flag resolved through `getObjectValue` / `getStringValue` paid a full
+    `JSON.stringify` per call (about 50us per read for a 60KB JSON config); a repeat read is now a
+    counter increment. Telemetry payloads are unchanged (qfg-23uf).
+
 ## 1.0.2 - 2026-10-16
 
 - Raise the `@quonfig/node` dev pin from `^1.6.0` to `^1.7.0` so this provider is built and tested
