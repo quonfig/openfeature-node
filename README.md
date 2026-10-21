@@ -113,3 +113,25 @@ OpenFeature.addHandler(ProviderEvents.ConfigurationChanged, () => {
   console.log("Configs updated!");
 });
 ```
+
+## Init failure and provider status
+
+Pass `onInitFailure` (`"fail"` | `"wait"` | `"continue"`, default `"fail"`) and `initTimeout` (ms,
+default 10000) in the provider options; they go straight to the wrapped `@quonfig/node` client. When
+no config has loaded by `initTimeout`, the provider status follows the mode:
+
+| `onInitFailure`  | `setProviderAndWait`                        | Provider status | When the client heals |
+| ---------------- | ------------------------------------------- | --------------- | --------------------- |
+| `fail` (default) | rejects with the SDK's `QuonfigInitError`   | `ERROR`         | `PROVIDER_READY`      |
+| `wait`           | blocks until config loads                   | `NOT_READY`     | resolves, `READY`     |
+| `continue`       | resolves, then `PROVIDER_ERROR` (non-fatal) | `ERROR`         | `PROVIDER_READY`      |
+
+In every mode the client keeps retrying in the background, so a caught `fail` does not leave a dead
+provider. While the provider is `ERROR`, evaluations still run and return your default with
+`errorCode: PROVIDER_NOT_READY`.
+
+```typescript
+const provider = new QuonfigProvider({ sdkKey, onInitFailure: "continue", initTimeout: 5000 });
+await OpenFeature.setProviderAndWait(provider);
+OpenFeature.addHandler(ProviderEvents.Ready, () => console.log("Quonfig config loaded"));
+```

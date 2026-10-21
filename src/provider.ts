@@ -53,8 +53,46 @@ export class QuonfigProvider implements Provider {
     });
   }
 
+  /**
+   * Initialize the wrapped client. Status follows the client's `onInitFailure`
+   * (design B.5), which you pass in the provider options with `initTimeout`:
+   *
+   * - `"fail"` (default): `init()` rejects, so this throws and the provider is
+   *   ERROR. The client is kept alive and retries in the background; on heal the
+   *   provider emits PROVIDER_READY.
+   * - `"wait"`: blocks until the first config, so the provider is NOT_READY
+   *   throughout and READY when it resolves.
+   * - `"continue"`: resolves on code defaults, then emits a non-fatal
+   *   PROVIDER_ERROR so the status is ERROR (evaluations still run and return
+   *   the caller default). On heal the provider emits PROVIDER_READY.
+   */
   async initialize(_context?: EvaluationContext): Promise<void> {
-    await this.client.init();
+    try {
+      await this.client.init();
+    } catch (err) {
+      this.emitReadyOnHeal();
+      throw err;
+    }
+    if (!this.client.isReady()) {
+      // OpenFeature marks the provider READY once initialize() resolves, so
+      // report the error after that has happened.
+      setTimeout(() => {
+        if (this.client.isReady()) return;
+        this.events.emit(ProviderEvents.Error, {
+          message: "[quonfig] no config loaded (onInitFailure=continue): serving code defaults",
+          errorCode: ErrorCode.PROVIDER_NOT_READY,
+        });
+      }, 0);
+      this.emitReadyOnHeal();
+    }
+  }
+
+  /** Emit PROVIDER_READY once the client's background retry loads config. */
+  private emitReadyOnHeal(): void {
+    this.client.waitForReady().then(
+      () => this.events.emit(ProviderEvents.Ready),
+      () => {} // closed before healing
+    );
   }
 
   async shutdown(): Promise<void> {
@@ -134,7 +172,8 @@ export class QuonfigProvider implements Provider {
  *   TARGETING_MATCH  → StandardResolutionReasons.TARGETING_MATCH
  *   SPLIT            → StandardResolutionReasons.SPLIT
  *   DEFAULT          → defaultValue + StandardResolutionReasons.DEFAULT
- *   ERROR            → defaultValue + ERROR + errorCode (FLAG_NOT_FOUND / TYPE_MISMATCH / GENERAL)
+ *   ERROR            → defaultValue + ERROR + errorCode (FLAG_NOT_FOUND / TYPE_MISMATCH /
+ *                      PROVIDER_NOT_READY / GENERAL)
  */
 function toResolutionDetails<T>(
   details: EvaluationDetails<T>,
@@ -186,6 +225,8 @@ function toOFErrorCode(code: EvaluationDetails<unknown>["errorCode"]): ErrorCode
       return ErrorCode.FLAG_NOT_FOUND;
     case "TYPE_MISMATCH":
       return ErrorCode.TYPE_MISMATCH;
+    case "PROVIDER_NOT_READY":
+      return ErrorCode.PROVIDER_NOT_READY;
     case "GENERAL":
     default:
       return ErrorCode.GENERAL;

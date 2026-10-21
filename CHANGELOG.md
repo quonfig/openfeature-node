@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Raise the `@quonfig/node` peer floor from `>=1.6.0` to `>=1.9.0` (dev pin `^1.9.0`): the provider
+  now uses the sdk-node 1.9.0 readiness API (`isReady()`, `waitForReady()`).
+- Map init failure to OpenFeature provider status (qfg-9p4i.12, design B.5). `onInitFailure` and
+  `initTimeout` pass through the provider options to the wrapped client.
+  - `"fail"` (default): `initialize` throws, so the provider is `ERROR`, as before. New: the client
+    is kept alive and retries in the background, and the provider emits `PROVIDER_READY` when it
+    heals, so the status becomes `READY` without re-registering the provider.
+  - `"wait"`: `initialize` blocks until the first config, so the provider stays `NOT_READY`.
+  - `"continue"`: `initialize` resolves on code defaults, then the provider emits a non-fatal
+    `PROVIDER_ERROR` (status `ERROR`; evaluations still run). It emits `PROVIDER_READY` on heal.
+- Evaluations before the client has config report `errorCode: PROVIDER_NOT_READY` (was `GENERAL`).
+- Provider users inherit sdk-node 1.9.0: `init()` retries through blips until `initTimeout` (default
+  10 s) instead of rejecting on the first failed attempt, and rejects with `QuonfigInitError`
+  (`.reason`: `timeout` | `unavailable` | `unauthorized`). See the sdk-node CHANGELOG.
+
 ## 1.0.3 - 2026-10-20
 
 - Raise the `@quonfig/node` dev pin from `^1.7.0` to `^1.8.0` so this provider is built and tested
