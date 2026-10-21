@@ -141,6 +141,18 @@ describe("init failure -> provider status (B.5)", () => {
       expect(details.errorCode).toBe(ErrorCode.PROVIDER_NOT_READY);
     });
 
+    it("emits nothing after shutdown", async () => {
+      const provider = new QuonfigProvider({ sdkKey: "k", onInitFailure: "continue" });
+      const onEvent = vi.fn();
+      provider.events.addHandler(ProviderEvents.Error, onEvent);
+      provider.events.addHandler(ProviderEvents.Ready, onEvent);
+      await provider.initialize();
+      await provider.shutdown();
+      heal();
+      await tick();
+      expect(onEvent).not.toHaveBeenCalled();
+    });
+
     it("emits PROVIDER_READY on heal", async () => {
       const provider = new QuonfigProvider({ sdkKey: "k", onInitFailure: "continue" });
       await OpenFeature.setProviderAndWait(provider);

@@ -12,7 +12,10 @@
   - `"wait"`: `initialize` blocks until the first config, so the provider stays `NOT_READY`.
   - `"continue"`: `initialize` resolves on code defaults, then the provider emits a non-fatal
     `PROVIDER_ERROR` (status `ERROR`; evaluations still run). It emits `PROVIDER_READY` on heal.
-- Evaluations before the client has config report `errorCode: PROVIDER_NOT_READY` (was `GENERAL`).
+- UPGRADE: evaluations before the client has config report `errorCode: PROVIDER_NOT_READY` (was
+  `GENERAL`). Value and reason are unchanged (your default, `ERROR`); only the code is more
+  specific. This passes through the code sdk-node 1.9.0 (a minor) already returns, and matches the
+  OpenFeature meaning of `PROVIDER_NOT_READY` (design B.5: one outage code across providers).
 - Provider users inherit sdk-node 1.9.0: `init()` retries through blips until `initTimeout` (default
   10 s) instead of rejecting on the first failed attempt, and rejects with `QuonfigInitError`
   (`.reason`: `timeout` | `unavailable` | `unauthorized`). See the sdk-node CHANGELOG.

@@ -42,6 +42,8 @@ export class QuonfigProvider implements Provider {
 
   private readonly client: Quonfig;
   private readonly targetingKeyMapping: string;
+  private closed = false;
+  private initErrorTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: QuonfigProviderOptions) {
     this.targetingKeyMapping = options.targetingKeyMapping ?? "user.id";
@@ -76,8 +78,8 @@ export class QuonfigProvider implements Provider {
     if (!this.client.isReady()) {
       // OpenFeature marks the provider READY once initialize() resolves, so
       // report the error after that has happened.
-      setTimeout(() => {
-        if (this.client.isReady()) return;
+      this.initErrorTimer = setTimeout(() => {
+        if (this.closed || this.client.isReady()) return;
         this.events.emit(ProviderEvents.Error, {
           message: "[quonfig] no config loaded (onInitFailure=continue): serving code defaults",
           errorCode: ErrorCode.PROVIDER_NOT_READY,
@@ -90,12 +92,16 @@ export class QuonfigProvider implements Provider {
   /** Emit PROVIDER_READY once the client's background retry loads config. */
   private emitReadyOnHeal(): void {
     this.client.waitForReady().then(
-      () => this.events.emit(ProviderEvents.Ready),
+      () => {
+        if (!this.closed) this.events.emit(ProviderEvents.Ready);
+      },
       () => {} // closed before healing
     );
   }
 
   async shutdown(): Promise<void> {
+    this.closed = true;
+    clearTimeout(this.initErrorTimer);
     await this.client.close();
   }
 
