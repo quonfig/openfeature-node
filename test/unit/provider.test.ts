@@ -16,6 +16,8 @@ const mockGetJSONDetails = vi.fn();
 const mockClientInstance = {
   init: mockInit,
   close: mockClose,
+  isReady: vi.fn(() => true),
+  waitForReady: vi.fn().mockResolvedValue(undefined),
   getBoolDetails: mockGetBoolDetails,
   getStringDetails: mockGetStringDetails,
   getNumberDetails: mockGetNumberDetails,

@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.0.0 - 2026-10-22
+
+**BREAKING:**
+
+- Requires `@quonfig/node` >= 1.9.0 (peer floor raised from `>=1.6.0`).
+- Evaluations before the client has config report `errorCode: PROVIDER_NOT_READY` instead of
+  `GENERAL`. Code that branches on `GENERAL` for this case must check `PROVIDER_NOT_READY`.
+- With `onInitFailure: "continue"` and no config, the provider status is `ERROR` (not `READY`) until
+  the client heals.
+
+**Changes:**
+
+- Raise the `@quonfig/node` peer floor from `>=1.6.0` to `>=1.9.0` (dev pin `^1.9.0`): the provider
+  now uses the sdk-node 1.9.0 readiness API (`isReady()`, `waitForReady()`).
+- Map init failure to OpenFeature provider status (qfg-9p4i.12, design B.5). `onInitFailure` and
+  `initTimeout` pass through the provider options to the wrapped client.
+  - `"fail"` (default): `initialize` throws, so the provider is `ERROR`, as before. New: the client
+    is kept alive and retries in the background, and the provider emits `PROVIDER_READY` when it
+    heals, so the status becomes `READY` without re-registering the provider.
+  - `"wait"`: `initialize` blocks until the first config, so the provider stays `NOT_READY`.
+  - `"continue"`: `initialize` resolves on code defaults, then the provider emits a non-fatal
+    `PROVIDER_ERROR` (status `ERROR`; evaluations still run). It emits `PROVIDER_READY` on heal.
+- UPGRADE: evaluations before the client has config report `errorCode: PROVIDER_NOT_READY` (was
+  `GENERAL`). Value and reason are unchanged (your default, `ERROR`); only the code is more
+  specific. This passes through the code sdk-node 1.9.0 (a minor) already returns, and matches the
+  OpenFeature meaning of `PROVIDER_NOT_READY` (design B.5: one outage code across providers).
+- Provider users inherit sdk-node 1.9.0: `init()` retries through blips until `initTimeout` (default
+  10 s) instead of rejecting on the first failed attempt, and rejects with `QuonfigInitError`
+  (`.reason`: `timeout` | `unavailable` | `unauthorized`). See the sdk-node CHANGELOG.
+
 ## 1.0.3 - 2026-10-20
 
 - Raise the `@quonfig/node` dev pin from `^1.7.0` to `^1.8.0` so this provider is built and tested
