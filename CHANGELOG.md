@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 - 2026-10-22
+
+**BREAKING:**
+
+- Requires `@quonfig/node` >= 1.9.0 (peer floor raised from `>=1.6.0`).
+- Evaluations before the client has config report `errorCode: PROVIDER_NOT_READY` instead of
+  `GENERAL`. Code that branches on `GENERAL` for this case must check `PROVIDER_NOT_READY`.
+- With `onInitFailure: "continue"` and no config, the provider status is `ERROR` (not `READY`) until
+  the client heals.
+
+**Changes:**
 
 - Raise the `@quonfig/node` peer floor from `>=1.6.0` to `>=1.9.0` (dev pin `^1.9.0`): the provider
   now uses the sdk-node 1.9.0 readiness API (`isReady()`, `waitForReady()`).
