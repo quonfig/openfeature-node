@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.0 - 2026-10-23
+
+- Requires `@quonfig/node` 1.10.0: raise the peer floor from `>=1.9.0` to `>=1.10.0` and the dev pin
+  from `^1.9.0` to `^1.10.0`, so the provider is built and tested against sdk-node 1.10.0 and
+  provider users get its size caps and `callback_errors_total` counter. No change to this provider's
+  code or its OpenFeature behavior. Provider users inherit from sdk-node 1.10.0:
+  - UPGRADE: size caps (qfg-6vno.20.3). One SSE event is capped at 4 MiB and a `/api/v2/configs` 200
+    body at 16 MiB. An over-cap event or body counts as a failed attempt (nothing installs; the
+    fallback poller or backoff takes over) and logs one WARN per oversized episode.
+  - UPGRADE: a throw or rejection from `onConfigUpdate` or `onSSEConnectionStateChange` is counted
+    in the new internal `quonfig_sdk_callback_errors_total{callback}` counter and no longer counts
+    as a worker restart (qfg-6vno.27).
+  - Client construction no longer throws when `os.homedir()` fails (qfg-za5s).
+  - See the sdk-node CHANGELOG for the full list.
+
 ## 2.0.0 - 2026-10-22
 
 **BREAKING:**
