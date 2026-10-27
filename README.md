@@ -97,7 +97,8 @@ the native `@quonfig/node` SDK:
 
 1. **Log levels** -- `shouldLog()` and `logger()` are native-only.
 2. **`string_list` configs** -- must be accessed via `getObjectValue()` and cast to `string[]`.
-3. **`duration` configs** -- return the raw millisecond number via `getNumberValue()`.
+3. **`duration` configs** -- native-only: read them with `getClient().getDuration()` (milliseconds).
+   `getNumberValue()` on a duration config returns your default with `TYPE_MISMATCH`.
 4. **`bytes` configs** -- not accessible via OpenFeature (no binary type in OF).
 5. **`keys()` and `rawConfig()`** -- native-only via `getClient()`.
 6. **Context keys use dot-notation** -- `"user.email"`, not nested objects.

@@ -1,5 +1,41 @@
 # Changelog
 
+## 3.0.0 - 2026-10-26
+
+Requires `@quonfig/node` 2.0.0: the cross-SDK typed-getter contract (qfg-zvyy). Raise the peer floor
+from `>=1.10.0` to `>=2.0.0` and the dev pin from `^1.10.0` to `^2.0.0`. No change to this
+provider's code: it passes through the `*Details` results of sdk-node 2.0.0, so provider users
+inherit the contract below.
+
+**BREAKING:**
+
+- Requires `@quonfig/node` >= 2.0.0 (peer floor raised from `>=1.10.0`).
+- UPGRADE: a value the getter cannot read as its type returns your default with reason `ERROR` and
+  `errorCode: TYPE_MISMATCH`. Strings are never coerced: a stored `"false"` or `"true"` is not a
+  bool, and a stored `"3"` is not a number. The only conversions are int and double configs to
+  `getNumberValue()`. Flags already resolved this way in 2.x for most type mismatches; what changes
+  for provider users:
+  - A malformed stored int or double (for example `"twelve"`) returns your default with
+    `TYPE_MISMATCH`. 2.x returned `NaN` with a success reason.
+  - A malformed ENV_VAR value reports `TYPE_MISMATCH`. 2.x reported `GENERAL`. An unset ENV_VAR or a
+    decryption failure still reports `GENERAL`, and returns your default.
+  - `getNumberValue()` on a `duration` config returns your default with `TYPE_MISMATCH`. 2.x
+    returned the duration in milliseconds. Durations are now native-only: use
+    `getClient().getDuration()`.
+- UPGRADE: sdk-node logs one WARN per key per client when a read returns your default because of a
+  type mismatch, a malformed value, an unset ENV_VAR or a decryption failure. The line names the
+  key, never the value.
+- UPGRADE: a wrong decryption key now degrades to your defaults (with one WARN per key) instead of
+  failing reads. If you call the native client via `getClient()`, see the sdk-node CHANGELOG
+  "UPGRADE to 2.0": typed getters take a default, `isEnabled` never throws, and `getInt` is new.
+
+**Tests:**
+
+- New `test/integration/typed-getter-contract.test.ts` drives the real provider through the
+  OpenFeature client against the integration-test-data `getter.contract.*` fixtures: wrong-type,
+  malformed and duration reads map to OpenFeature `TYPE_MISMATCH` with the caller default; matching
+  and int/double reads resolve; an unset ENV_VAR returns the default with `GENERAL`.
+
 ## 2.1.0 - 2026-10-23
 
 - Requires `@quonfig/node` 1.10.0: raise the peer floor from `>=1.9.0` to `>=1.10.0` and the dev pin
