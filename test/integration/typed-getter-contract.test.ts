@@ -67,15 +67,8 @@ describe("typed-getter contract: wrong type -> default + TYPE_MISMATCH", () => {
     expectTypeMismatch(details, true);
   });
 
-  it("number on a malformed stored double returns the default, not NaN", async () => {
-    const details = await client.getNumberDetails("getter.contract.double.malformed", 1.5);
-    expectTypeMismatch(details, 1.5);
-  });
-
-  it("number on a malformed stored int returns the default, not NaN", async () => {
-    const details = await client.getNumberDetails("getter.contract.int.malformed", 12);
-    expectTypeMismatch(details, 12);
-  });
+  // Malformed stored and ENV_VAR values are PARSE_ERROR, not TYPE_MISMATCH:
+  // see parse-error.test.ts (qfg-9xsl).
 
   it("number on a duration config returns the default", async () => {
     const details = await client.getNumberDetails("getter.contract.duration", 5);
@@ -128,15 +121,5 @@ describe("typed-getter contract: resolution errors return the default", () => {
     expect(details.value).toBe(true);
     expect(details.reason).toBe(StandardResolutionReasons.ERROR);
     expect(details.errorCode).toBe(ErrorCode.GENERAL);
-  });
-
-  it("number on a malformed ENV_VAR value returns the default with TYPE_MISMATCH", async () => {
-    process.env.QUONFIG_ITD_GETTER_INT = "twelve";
-    try {
-      const details = await client.getNumberDetails("getter.contract.provided.int.malformed", 4);
-      expectTypeMismatch(details, 4);
-    } finally {
-      delete process.env.QUONFIG_ITD_GETTER_INT;
-    }
   });
 });
