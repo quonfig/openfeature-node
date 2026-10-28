@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.1.0 - 2026-10-28
+
+A value whose type matches the read but which cannot be parsed now returns your default with reason
+`ERROR` and `errorCode: PARSE_ERROR`. In 3.0.0 it reported `TYPE_MISMATCH` (qfg-9xsl, matching
+integration-test-data `tests/openfeature/openfeature.yaml` Case 6 and openfeature-go). This covers:
+
+- A malformed stored int or double, for example `"twelve"` read with `getNumberValue()`.
+- An ENV_VAR-provided value that does not parse as the config's type, for example an int config
+  whose env var holds `"twelve"`.
+
+Reading a config with the method for another type, for example `getBooleanValue()` on an int config,
+still reports `TYPE_MISMATCH`. An unset ENV_VAR or a decryption failure still reports `GENERAL`.
+
 ## 3.0.0 - 2026-10-26
 
 Requires `@quonfig/node` 2.0.0: the cross-SDK typed-getter contract (qfg-zvyy). Raise the peer floor

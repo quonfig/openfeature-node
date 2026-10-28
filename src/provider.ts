@@ -9,7 +9,7 @@ import {
   ResolutionDetails,
   StandardResolutionReasons,
 } from "@openfeature/server-sdk";
-import { EvaluationDetails, Quonfig, QuonfigOptions } from "@quonfig/node";
+import { EvaluationDetails, Quonfig, QuonfigOptions, ValueType } from "@quonfig/node";
 import { mapContext } from "./context.js";
 
 export interface QuonfigProviderOptions extends Omit<QuonfigOptions, "onConfigUpdate"> {
@@ -113,7 +113,7 @@ export class QuonfigProvider implements Provider {
   ): Promise<ResolutionDetails<boolean>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getBoolDetails(flagKey, mappedCtx);
-    return toResolutionDetails(details, defaultValue);
+    return this.resolve(flagKey, details, defaultValue, BOOL_TYPES);
   }
 
   async resolveStringEvaluation(
@@ -124,7 +124,7 @@ export class QuonfigProvider implements Provider {
   ): Promise<ResolutionDetails<string>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getStringDetails(flagKey, mappedCtx);
-    return toResolutionDetails(details, defaultValue);
+    return this.resolve(flagKey, details, defaultValue, STRING_TYPES);
   }
 
   async resolveNumberEvaluation(
@@ -135,7 +135,7 @@ export class QuonfigProvider implements Provider {
   ): Promise<ResolutionDetails<number>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getNumberDetails(flagKey, mappedCtx);
-    return toResolutionDetails(details, defaultValue);
+    return this.resolve(flagKey, details, defaultValue, NUMBER_TYPES);
   }
 
   async resolveObjectEvaluation<T extends JsonValue>(
@@ -158,7 +158,39 @@ export class QuonfigProvider implements Provider {
       );
     }
     const jsonDetails = this.client.getJSONDetails(flagKey, mappedCtx);
-    return toResolutionDetails(jsonDetails as EvaluationDetails<T>, defaultValue);
+    return this.resolve(flagKey, jsonDetails as EvaluationDetails<T>, defaultValue, OBJECT_TYPES);
+  }
+
+  /**
+   * Translate native details, telling a malformed value apart from a wrong-type
+   * read (qfg-9xsl). sdk-node's `*Details` getters report both as
+   * `TYPE_MISMATCH`, but a wrong-type read fails its check against the config's
+   * declared `valueType` before evaluating. So a `TYPE_MISMATCH` on a config
+   * whose declared type this read accepts means the value itself did not parse
+   * (a stored int "twelve", an ENV_VAR int set to "twelve"): `PARSE_ERROR`.
+   */
+  private resolve<T>(
+    flagKey: string,
+    details: EvaluationDetails<T>,
+    defaultValue: T,
+    readTypes: readonly ValueType[]
+  ): ResolutionDetails<T> {
+    const result = toResolutionDetails(details, defaultValue);
+    if (result.errorCode === ErrorCode.TYPE_MISMATCH) {
+      const valueType = this.declaredValueType(flagKey);
+      if (valueType !== undefined && readTypes.includes(valueType)) {
+        result.errorCode = ErrorCode.PARSE_ERROR;
+      }
+    }
+    return result;
+  }
+
+  private declaredValueType(flagKey: string): ValueType | undefined {
+    try {
+      return this.client.rawConfig(flagKey)?.valueType;
+    } catch {
+      return undefined; // not initialized: keep the native error code
+    }
   }
 
   /**
@@ -170,6 +202,13 @@ export class QuonfigProvider implements Provider {
   }
 }
 
+// The declared valueTypes each OpenFeature read accepts; these mirror sdk-node's
+// own check of the requested type against a config's valueType.
+const BOOL_TYPES: readonly ValueType[] = ["bool"];
+const STRING_TYPES: readonly ValueType[] = ["string", "log_level"];
+const NUMBER_TYPES: readonly ValueType[] = ["int", "double"];
+const OBJECT_TYPES: readonly ValueType[] = ["string_list", "json"];
+
 /**
  * Translate a Quonfig EvaluationDetails<T> into an OpenFeature ResolutionDetails<T>.
  *
@@ -179,7 +218,8 @@ export class QuonfigProvider implements Provider {
  *   SPLIT            → StandardResolutionReasons.SPLIT
  *   DEFAULT          → defaultValue + StandardResolutionReasons.DEFAULT
  *   ERROR            → defaultValue + ERROR + errorCode (FLAG_NOT_FOUND / TYPE_MISMATCH /
- *                      PROVIDER_NOT_READY / GENERAL)
+ *                      PROVIDER_NOT_READY / GENERAL; QuonfigProvider.resolve refines a
+ *                      malformed value's TYPE_MISMATCH to PARSE_ERROR)
  */
 function toResolutionDetails<T>(
   details: EvaluationDetails<T>,
