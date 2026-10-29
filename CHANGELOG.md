@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.3.0 - 2026-10-29
+
+When `@quonfig/node` reports `PARSE_ERROR` for a malformed value, the provider now returns it as
+OpenFeature `PARSE_ERROR` on every read: boolean, number, string, a duration read as a string, and
+object (string_list or JSON). Before, an SDK `PARSE_ERROR` fell through to `GENERAL` (qfg-wg1n).
+
+The peer floor stays `>=2.1.0`, and sdk-node 2.1.0 still reports a malformed value as
+`TYPE_MISMATCH`. For it, the provider still maps `TYPE_MISMATCH` on a config whose declared type
+matches the read to `PARSE_ERROR`, as in 3.1.0. The result is the same with either SDK version.
+
 ## 3.2.0 - 2026-10-29
 
 `getStringValue()` on a `duration` config returns its stored ISO 8601 text again (reason `STATIC`),

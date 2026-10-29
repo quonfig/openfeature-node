@@ -482,4 +482,104 @@ describe("QuonfigProvider", () => {
       expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
     });
   });
+
+  // qfg-wg1n: newer sdk-node reports a malformed value (a stored int "twelve",
+  // an ENV_VAR int set to "twelve") as PARSE_ERROR itself. The provider passes
+  // it straight through on every read, whatever the declared valueType. Here
+  // rawConfig() knows nothing about the key, so the TYPE_MISMATCH workaround
+  // cannot be what produces the PARSE_ERROR.
+  describe("SDK PARSE_ERROR passthrough (qfg-wg1n)", () => {
+    const parseError = {
+      value: undefined,
+      reason: "ERROR",
+      errorCode: "PARSE_ERROR",
+      errorMessage: 'Config "k" value "twelve" cannot be converted to int',
+      variant: "default",
+      flagMetadata: { configId: "c1", configType: "CONFIG" },
+    };
+
+    const expectParseError = (result: {
+      reason?: string;
+      errorCode?: ErrorCode;
+      errorMessage?: string;
+      variant?: string;
+    }) => {
+      expect(result.reason).toBe(StandardResolutionReasons.ERROR);
+      expect(result.errorCode).toBe(ErrorCode.PARSE_ERROR);
+      expect(result.errorMessage).toBe(parseError.errorMessage);
+      expect(result.variant).toBe("default");
+    };
+
+    it("boolean read", async () => {
+      mockGetBoolDetails.mockReturnValue(parseError);
+      const result = await provider.resolveBooleanEvaluation("k", true, {}, {} as any);
+      expect(result.value).toBe(true);
+      expectParseError(result);
+    });
+
+    it("number read", async () => {
+      mockGetNumberDetails.mockReturnValue(parseError);
+      const result = await provider.resolveNumberEvaluation("k", 7, {}, {} as any);
+      expect(result.value).toBe(7);
+      expectParseError(result);
+    });
+
+    it("string read through evaluateDetails", async () => {
+      mockEvaluateDetails.mockReturnValue(parseError);
+      const result = await provider.resolveStringEvaluation("k", "dflt", {}, {} as any);
+      expect(result.value).toBe("dflt");
+      expectParseError(result);
+    });
+
+    it("string read on another type, through getStringDetails", async () => {
+      mockEvaluateDetails.mockReturnValue({ value: 3, reason: "STATIC", valueType: "int" });
+      mockGetStringDetails.mockReturnValue(parseError);
+      const result = await provider.resolveStringEvaluation("k", "dflt", {}, {} as any);
+      expect(result.value).toBe("dflt");
+      expectParseError(result);
+    });
+
+    it("duration read as a string", async () => {
+      mockEvaluateDetails.mockReturnValue({ ...parseError, valueType: "duration" });
+      const result = await provider.resolveStringEvaluation("k", "PT0S", {}, {} as any);
+      expect(result.value).toBe("PT0S");
+      expectParseError(result);
+      expect(mockGetStringDetails).not.toHaveBeenCalled();
+    });
+
+    it("object read on a string_list", async () => {
+      mockGetStringListDetails.mockReturnValue(parseError);
+      mockGetJSONDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+      });
+      const result = await provider.resolveObjectEvaluation("k", ["d"], {}, {} as any);
+      expect(result.value).toEqual(["d"]);
+      expectParseError(result);
+    });
+
+    it("object read on a json config", async () => {
+      mockGetStringListDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+      });
+      mockGetJSONDetails.mockReturnValue(parseError);
+      const result = await provider.resolveObjectEvaluation("k", { d: 1 }, {}, {} as any);
+      expect(result.value).toEqual({ d: 1 });
+      expectParseError(result);
+    });
+
+    it("still reports TYPE_MISMATCH for a wrong-type read", async () => {
+      mockGetBoolDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+      });
+      mockRawConfig.mockReturnValue({ valueType: "int" });
+      const result = await provider.resolveBooleanEvaluation("k", false, {}, {} as any);
+      expect(result.errorCode).toBe(ErrorCode.TYPE_MISMATCH);
+    });
+  });
 });

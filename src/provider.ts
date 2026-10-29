@@ -173,10 +173,13 @@ export class QuonfigProvider implements Provider {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     // Try string_list first (returns string[]), fall back to JSON.
     const listDetails = this.client.getStringListDetails(flagKey, mappedCtx);
+    // A malformed string_list (PARSE_ERROR from a newer sdk-node, qfg-wg1n)
+    // is the answer too: the JSON read would only add a TYPE_MISMATCH.
     if (
       listDetails.reason === "STATIC" ||
       listDetails.reason === "TARGETING_MATCH" ||
-      listDetails.reason === "SPLIT"
+      listDetails.reason === "SPLIT" ||
+      isParseError(listDetails)
     ) {
       return toResolutionDetails(
         listDetails as EvaluationDetails<unknown> as EvaluationDetails<T>,
@@ -194,6 +197,10 @@ export class QuonfigProvider implements Provider {
    * declared `valueType` before evaluating. So a `TYPE_MISMATCH` on a config
    * whose declared type this read accepts means the value itself did not parse
    * (a stored int "twelve", an ENV_VAR int set to "twelve"): `PARSE_ERROR`.
+   *
+   * A newer sdk-node reports such a value as `PARSE_ERROR` itself (qfg-wg1n);
+   * toResolutionDetails() passes that straight through, so the remap below only
+   * matters for an sdk-node that still says `TYPE_MISMATCH`.
    */
   private resolve<T>(
     flagKey: string,
@@ -218,8 +225,9 @@ export class QuonfigProvider implements Provider {
    * stored ("PT90S" stays "PT90S"), with the evaluation's reason, variant and
    * flagMetadata. evaluateDetails() does not validate it, so a stored value
    * outside the duration grammar ("30s") is PARSE_ERROR here. A malformed
-   * ENV_VAR value fails inside the SDK as TYPE_MISMATCH, which resolve() also
-   * maps to PARSE_ERROR; an unset ENV_VAR stays GENERAL.
+   * ENV_VAR value fails inside the SDK as PARSE_ERROR (a newer sdk-node) or
+   * TYPE_MISMATCH (sdk-node 2.1.0, which resolve() maps to PARSE_ERROR); an
+   * unset ENV_VAR stays GENERAL.
    */
   private resolveDurationAsString(
     flagKey: string,
@@ -287,8 +295,9 @@ function asStringDetails(details: StoredEvaluationDetails): EvaluationDetails<st
  *   SPLIT            → StandardResolutionReasons.SPLIT
  *   DEFAULT          → defaultValue + StandardResolutionReasons.DEFAULT
  *   ERROR            → defaultValue + ERROR + errorCode (FLAG_NOT_FOUND / TYPE_MISMATCH /
- *                      PROVIDER_NOT_READY / GENERAL; QuonfigProvider.resolve refines a
- *                      malformed value's TYPE_MISMATCH to PARSE_ERROR)
+ *                      PARSE_ERROR / PROVIDER_NOT_READY / GENERAL; QuonfigProvider.resolve
+ *                      refines a malformed value's TYPE_MISMATCH to PARSE_ERROR for an
+ *                      sdk-node that does not report PARSE_ERROR itself)
  */
 function toResolutionDetails<T>(
   details: EvaluationDetails<T>,
@@ -327,19 +336,33 @@ function toResolutionDetails<T>(
       return {
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
-        errorCode: toOFErrorCode(details.errorCode),
+        errorCode: toOFErrorCode(sdkErrorCode(details as EvaluationDetails<unknown>)),
         errorMessage: details.errorMessage,
         ...common,
       };
   }
 }
 
-function toOFErrorCode(code: EvaluationDetails<unknown>["errorCode"]): ErrorCode {
+/**
+ * sdk-node's error code, widened to string: sdk-node 2.1.0's union has no
+ * PARSE_ERROR, and a newer one reports it for a malformed value (qfg-wg1n).
+ */
+function sdkErrorCode(details: EvaluationDetails<unknown>): string | undefined {
+  return details.errorCode as string | undefined;
+}
+
+function isParseError(details: EvaluationDetails<unknown>): boolean {
+  return details.reason === "ERROR" && sdkErrorCode(details) === "PARSE_ERROR";
+}
+
+function toOFErrorCode(code: string | undefined): ErrorCode {
   switch (code) {
     case "FLAG_NOT_FOUND":
       return ErrorCode.FLAG_NOT_FOUND;
     case "TYPE_MISMATCH":
       return ErrorCode.TYPE_MISMATCH;
+    case "PARSE_ERROR":
+      return ErrorCode.PARSE_ERROR;
     case "PROVIDER_NOT_READY":
       return ErrorCode.PROVIDER_NOT_READY;
     case "GENERAL":
