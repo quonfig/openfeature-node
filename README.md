@@ -97,7 +97,9 @@ the native `@quonfig/node` SDK:
 
 1. **Log levels** -- `shouldLog()` and `logger()` are native-only.
 2. **`string_list` configs** -- must be accessed via `getObjectValue()` and cast to `string[]`.
-3. **`duration` configs** -- native-only: read them with `getClient().getDuration()` (milliseconds).
+3. **`duration` configs** -- read them with `getStringValue()`, which returns the stored ISO 8601
+   text (for example `"PT90S"`), or the text an ENV_VAR provides. A value that is not valid ISO 8601
+   returns your default with `PARSE_ERROR`. For milliseconds, use `getClient().getDuration()`.
    `getNumberValue()` on a duration config returns your default with `TYPE_MISMATCH`.
 4. **`bytes` configs** -- not accessible via OpenFeature (no binary type in OF).
 5. **`keys()` and `rawConfig()`** -- native-only via `getClient()`.
