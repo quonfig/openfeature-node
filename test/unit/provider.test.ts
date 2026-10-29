@@ -12,6 +12,9 @@ const mockGetStringDetails = vi.fn();
 const mockGetNumberDetails = vi.fn();
 const mockGetStringListDetails = vi.fn();
 const mockGetJSONDetails = vi.fn();
+const mockRawConfig = vi.fn();
+const mockGetRawMatch = vi.fn();
+const mockGetDuration = vi.fn();
 
 const mockClientInstance = {
   init: mockInit,
@@ -23,6 +26,9 @@ const mockClientInstance = {
   getNumberDetails: mockGetNumberDetails,
   getStringListDetails: mockGetStringListDetails,
   getJSONDetails: mockGetJSONDetails,
+  rawConfig: mockRawConfig,
+  getRawMatch: mockGetRawMatch,
+  getDuration: mockGetDuration,
 };
 
 vi.mock("@quonfig/node", () => {
@@ -40,6 +46,7 @@ describe("QuonfigProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInit.mockResolvedValue(undefined);
+    mockRawConfig.mockReturnValue(undefined);
     provider = new QuonfigProvider({ sdkKey: "test-key", datadir: "/fake" });
   });
 
@@ -179,6 +186,89 @@ describe("QuonfigProvider", () => {
       expect(result.value).toBe("fallback");
       expect(result.reason).toBe(StandardResolutionReasons.ERROR);
       expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
+    });
+  });
+
+  // A duration config reads as its ISO 8601 text (qfg-177f). The stored-text,
+  // STATIC and PARSE_ERROR cases run against real fixtures in
+  // test/integration/parse-error.test.ts; these cover the rule-dependent paths.
+  describe("resolveStringEvaluation on a duration config", () => {
+    const mismatch = {
+      value: undefined,
+      reason: "ERROR",
+      errorCode: "TYPE_MISMATCH",
+      flagMetadata: { configId: "c1", configType: "CONFIG" },
+    };
+    const durationConfig = (criteria: { operator: string }[]) => ({
+      valueType: "duration",
+      default: { rules: [{ criteria, value: { type: "duration", value: "PT5M" } }] },
+    });
+    const rawMatch = (value: unknown, metadata: object, extra: object = {}) => ({
+      config: { key: "d", type: "duration", value, metadata, ...extra },
+    });
+
+    beforeEach(() => {
+      mockGetStringDetails.mockReturnValue(mismatch);
+    });
+
+    it("reports a targeted rule as TARGETING_MATCH with its rule index", async () => {
+      mockRawConfig.mockReturnValue(durationConfig([{ operator: "PROP_IS_ONE_OF" }]));
+      mockGetRawMatch.mockReturnValue(rawMatch("PT5M", { configRowIndex: 0 }));
+      mockGetDuration.mockReturnValue(300000);
+      const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
+      expect(result.value).toBe("PT5M");
+      expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
+      expect(result.variant).toBe("targeting:0");
+      expect(result.flagMetadata).toEqual({ configId: "c1", configType: "CONFIG", ruleIndex: 0 });
+    });
+
+    it("reports a weighted value as SPLIT", async () => {
+      mockRawConfig.mockReturnValue(durationConfig([{ operator: "ALWAYS_TRUE" }]));
+      mockGetRawMatch.mockReturnValue(
+        rawMatch("PT1S", { configRowIndex: 0, weightedValueIndex: 1 })
+      );
+      mockGetDuration.mockReturnValue(1000);
+      const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
+      expect(result.value).toBe("PT1S");
+      expect(result.reason).toBe(StandardResolutionReasons.SPLIT);
+      expect(result.variant).toBe("split:1");
+    });
+
+    it("renders an ENV_VAR-provided duration from its resolved milliseconds", async () => {
+      mockRawConfig.mockReturnValue(durationConfig([{ operator: "ALWAYS_TRUE" }]));
+      mockGetRawMatch.mockReturnValue(
+        rawMatch(
+          { source: "ENV_VAR", lookup: "D" },
+          { configRowIndex: 0 },
+          {
+            type: "provided",
+            dependencies: [{ dependencyType: "providedBy", source: "D" }],
+          }
+        )
+      );
+      mockGetDuration.mockReturnValue(1500);
+      const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
+      expect(result.value).toBe("PT1.5S");
+      expect(result.reason).toBe(StandardResolutionReasons.STATIC);
+    });
+
+    it("returns the default with GENERAL when an ENV_VAR duration does not resolve", async () => {
+      mockRawConfig.mockReturnValue(durationConfig([{ operator: "ALWAYS_TRUE" }]));
+      mockGetRawMatch.mockReturnValue(
+        rawMatch({ source: "ENV_VAR", lookup: "D" }, { configRowIndex: 0 }, { type: "provided" })
+      );
+      mockGetDuration.mockReturnValue(Number.NaN);
+      const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
+      expect(result.value).toBe("PT0S");
+      expect(result.errorCode).toBe(ErrorCode.GENERAL);
+    });
+
+    it("returns the default with DEFAULT when no rule matches", async () => {
+      mockRawConfig.mockReturnValue(durationConfig([{ operator: "PROP_IS_ONE_OF" }]));
+      mockGetRawMatch.mockReturnValue(undefined);
+      const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
+      expect(result.value).toBe("PT0S");
+      expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
     });
   });
 

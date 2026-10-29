@@ -9,7 +9,16 @@ import {
   ResolutionDetails,
   StandardResolutionReasons,
 } from "@openfeature/server-sdk";
-import { EvaluationDetails, Quonfig, QuonfigOptions, ValueType } from "@quonfig/node";
+import { Quonfig } from "@quonfig/node";
+import type {
+  ConfigResponse,
+  Contexts,
+  EvaluationDetails,
+  QuonfigOptions,
+  RawMatch,
+  Rule,
+  ValueType,
+} from "@quonfig/node";
 import { mapContext } from "./context.js";
 
 export interface QuonfigProviderOptions extends Omit<QuonfigOptions, "onConfigUpdate"> {
@@ -124,6 +133,9 @@ export class QuonfigProvider implements Provider {
   ): Promise<ResolutionDetails<string>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getStringDetails(flagKey, mappedCtx);
+    if (details.errorCode === "TYPE_MISMATCH" && this.declaredValueType(flagKey) === "duration") {
+      return this.resolveDurationAsString(flagKey, mappedCtx, defaultValue, details);
+    }
     return this.resolve(flagKey, details, defaultValue, STRING_TYPES);
   }
 
@@ -185,6 +197,93 @@ export class QuonfigProvider implements Provider {
     return result;
   }
 
+  /**
+   * Read a duration config as its stored ISO 8601 text (qfg-177f). OpenFeature
+   * has no duration type, so getStringValue() is how you read one, as in
+   * openfeature-go and the shared OpenFeature cases. The text comes back as
+   * stored ("PT90S" stays "PT90S"). A stored value that is not valid ISO 8601
+   * is PARSE_ERROR.
+   *
+   * sdk-node's getStringDetails() rejects a duration config before evaluating
+   * it, so this evaluates through public calls: getRawMatch() for the matched
+   * stored value and its rule, and getDuration() to validate it (and to resolve
+   * ENV_VAR-provided or encrypted values, whose text getRawMatch() does not
+   * hold). `mismatch` is the rejected details, which carry the flagMetadata.
+   */
+  private resolveDurationAsString(
+    flagKey: string,
+    contexts: Contexts,
+    defaultValue: string,
+    mismatch: EvaluationDetails<string>
+  ): ResolutionDetails<string> {
+    const metadata = { ...mismatch.flagMetadata } as Record<string, string | number | boolean>;
+    const error = (errorCode: ErrorCode, errorMessage: string): ResolutionDetails<string> => ({
+      value: defaultValue,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode,
+      errorMessage,
+      variant: "default",
+      flagMetadata: metadata,
+    });
+    let match: RawMatch | undefined;
+    let config: ConfigResponse | undefined;
+    let ms: number;
+    try {
+      match = this.client.getRawMatch(flagKey, contexts);
+      if (match === undefined) {
+        return {
+          value: defaultValue,
+          reason: StandardResolutionReasons.DEFAULT,
+          variant: "default",
+          flagMetadata: metadata,
+        };
+      }
+      config = this.client.rawConfig(flagKey);
+      ms = this.client.getDuration(flagKey, contexts, Number.NaN);
+    } catch (err) {
+      return error(ErrorCode.GENERAL, err instanceof Error ? err.message : String(err));
+    }
+    const raw = match.config;
+    const storedText =
+      raw.type === "duration" &&
+      typeof raw.value === "string" &&
+      !raw.confidential &&
+      !raw.dependencies?.length
+        ? raw.value
+        : undefined;
+    if (Number.isNaN(ms)) {
+      // A plain stored value that did not parse is malformed. One resolved
+      // through an env var or decryption may also be unset or undecryptable.
+      return storedText !== undefined
+        ? error(ErrorCode.PARSE_ERROR, `Config "${flagKey}" is not a valid ISO 8601 duration`)
+        : error(ErrorCode.GENERAL, `Config "${flagKey}" did not resolve to a valid duration`);
+    }
+
+    const ruleIndex = raw.metadata.configRowIndex;
+    const splitIndex = raw.metadata.weightedValueIndex;
+    let reason: string;
+    let variant: string;
+    if (splitIndex !== undefined) {
+      reason = StandardResolutionReasons.SPLIT;
+      variant = `split:${splitIndex}`;
+      Object.assign(metadata, { ruleIndex, weightedValueIndex: splitIndex });
+    } else if (ruleIndex === 0 && config !== undefined && !hasTargetingRules(config)) {
+      reason = StandardResolutionReasons.STATIC;
+      variant = "static";
+    } else {
+      reason = StandardResolutionReasons.TARGETING_MATCH;
+      variant = `targeting:${ruleIndex}`;
+      Object.assign(metadata, { ruleIndex });
+    }
+    return {
+      // Text we cannot see (ENV_VAR, encrypted) is rendered from the resolved ms.
+      value: storedText ?? `PT${ms / 1000}S`,
+      reason,
+      variant,
+      flagMetadata: metadata,
+    };
+  }
+
   private declaredValueType(flagKey: string): ValueType | undefined {
     try {
       return this.client.rawConfig(flagKey)?.valueType;
@@ -208,6 +307,16 @@ const BOOL_TYPES: readonly ValueType[] = ["bool"];
 const STRING_TYPES: readonly ValueType[] = ["string", "log_level"];
 const NUMBER_TYPES: readonly ValueType[] = ["int", "double"];
 const OBJECT_TYPES: readonly ValueType[] = ["string_list", "json"];
+
+/**
+ * Whether a config has a rule that can fail to match: what makes a rule-0 match
+ * TARGETING_MATCH rather than STATIC. This mirrors sdk-node's own reason check.
+ */
+function hasTargetingRules(config: ConfigResponse): boolean {
+  const targets = (rules: Rule[] | undefined) =>
+    (rules ?? []).some((rule) => rule.criteria.some((c) => c.operator !== "ALWAYS_TRUE"));
+  return targets(config.default.rules) || targets(config.environment?.rules);
+}
 
 /**
  * Translate a Quonfig EvaluationDetails<T> into an OpenFeature ResolutionDetails<T>.

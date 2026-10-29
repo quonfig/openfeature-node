@@ -67,13 +67,17 @@ describe("Case 6: a malformed value is PARSE_ERROR; a wrong-type read is TYPE_MI
   });
 });
 
-// Skipped, pending a decision (qfg-9xsl). Since 3.0.0 durations are
-// native-only in this provider: getStringValue() on any duration config,
-// well-formed or not, is a wrong-type read (TYPE_MISMATCH). ITD Case 2 and
-// openfeature-go instead read a duration as its ISO 8601 string, which is what
-// makes a malformed one a PARSE_ERROR. Un-skip these once string reads of
-// durations are supported.
-describe.skip("Case 2: durations via resolveStringValue", () => {
+// ITD Case 2 (qfg-177f): OpenFeature has no duration type, so a duration
+// config reads through getStringValue() as its stored ISO 8601 text, unchanged.
+// A stored duration that is not valid ISO 8601 is PARSE_ERROR.
+describe("Case 2: durations via resolveStringValue", () => {
+  it("duration via resolveStringValue returns the stored ISO string, not re-normalized", async () => {
+    const details = await client.getStringDetails("test.duration.PT90S", "PT0S");
+    expect(details.value).toBe("PT90S");
+    expect(details.reason).toBe(StandardResolutionReasons.STATIC);
+    expect(details.errorCode).toBeUndefined();
+  });
+
   it("malformed stored duration via resolveStringValue returns default with PARSE_ERROR", async () => {
     const details = await client.getStringDetails("test.duration.malformed.30s", "PT0S");
     expectError(details, "PT0S", ErrorCode.PARSE_ERROR);
@@ -83,5 +87,6 @@ describe.skip("Case 2: durations via resolveStringValue", () => {
     const details = await client.getStringDetails("test.duration.P1DT6H2M1.5S", "PT0S");
     expect(details.value).toBe("P1DT6H2M1.5S");
     expect(details.reason).toBe(StandardResolutionReasons.STATIC);
+    expect(details.variant).toBe("static");
   });
 });

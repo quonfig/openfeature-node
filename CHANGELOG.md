@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.0 - 2026-10-29
+
+`getStringValue()` on a `duration` config returns its stored ISO 8601 text again (reason `STATIC`),
+as in openfeature-go and -web and the shared OpenFeature cases. 3.x returned your default with
+`TYPE_MISMATCH`. `getNumberValue()` on a duration still returns your default.
+
 ## 3.1.0 - 2026-10-28
 
 A value whose type matches the read but which cannot be parsed now returns your default with reason
