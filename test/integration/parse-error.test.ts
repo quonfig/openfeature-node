@@ -7,13 +7,18 @@
 // "30s") returns the caller's default with reason ERROR and errorCode
 // PARSE_ERROR. Reading a config with the method for another type stays
 // TYPE_MISMATCH.
-import { describe, it, expect, afterAll, beforeAll } from "vitest";
+import { describe, it, expect, afterAll, beforeAll, vi } from "vitest";
 import { ErrorCode, OpenFeature, StandardResolutionReasons } from "@openfeature/server-sdk";
 import { QuonfigProvider } from "../../src/provider.js";
 import { integrationTestDataDir } from "../helpers.js";
 
-const ENV_VAR = "QUONFIG_ITD_GETTER_INT";
-const previousEnv = process.env[ENV_VAR];
+// Env vars the provided.* fixtures read, and the values these tests give them.
+const ENV_VARS: Record<string, string> = {
+  QUONFIG_ITD_GETTER_INT: "twelve",
+  QUONFIG_ITD_DURATION_PT1_5S: "PT1.5S",
+  QUONFIG_ITD_DURATION_30S: "30s",
+};
+const previousEnv = Object.fromEntries(Object.keys(ENV_VARS).map((k) => [k, process.env[k]]));
 
 const provider = new QuonfigProvider({
   sdkKey: "test-sdk-key",
@@ -26,12 +31,14 @@ await OpenFeature.setProviderAndWait(provider);
 const client = OpenFeature.getClient("parse-error");
 
 beforeAll(() => {
-  process.env[ENV_VAR] = "twelve";
+  Object.assign(process.env, ENV_VARS);
 });
 
 afterAll(async () => {
-  if (previousEnv === undefined) delete process.env[ENV_VAR];
-  else process.env[ENV_VAR] = previousEnv;
+  for (const [k, v] of Object.entries(previousEnv)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
   await OpenFeature.close();
 });
 
@@ -89,4 +96,68 @@ describe("Case 2: durations via resolveStringValue", () => {
     expect(details.reason).toBe(StandardResolutionReasons.STATIC);
     expect(details.variant).toBe("static");
   });
+
+  it("weighted duration via resolveStringValue returns the stored text with SPLIT", async () => {
+    const details = await client.getStringDetails("weighted.variant.duration", "PT0S", {
+      targetingKey: "u1",
+    });
+    expect(details.value).toBe("PT90S");
+    expect(details.reason).toBe(StandardResolutionReasons.SPLIT);
+    expect(details.variant).toBe("split:0");
+    expect(details.flagMetadata.weightedValueIndex).toBe(0);
+  });
+
+  it("ENV_VAR-provided duration via resolveStringValue returns the env var's text", async () => {
+    const details = await client.getStringDetails("provided.duration.PT1.5S", "PT0S");
+    expect(details.value).toBe("PT1.5S");
+    expect(details.reason).toBe(StandardResolutionReasons.STATIC);
+    expect(details.errorCode).toBeUndefined();
+  });
+
+  it("malformed ENV_VAR duration via resolveStringValue returns default with PARSE_ERROR", async () => {
+    const details = await client.getStringDetails("provided.duration.malformed.30s", "PT0S");
+    expectError(details, "PT0S", ErrorCode.PARSE_ERROR);
+  });
+
+  it("duration via resolveNumberValue stays TYPE_MISMATCH", async () => {
+    const details = await client.getNumberDetails("test.duration.PT90S", 0);
+    expectError(details, 0, ErrorCode.TYPE_MISMATCH);
+  });
+});
+
+// One evaluation per string resolution (qfg-177f): evaluateDetails() is the
+// only read for a string, log_level or duration config, so each resolution is
+// counted once in telemetry. Its result matches the typed getter's.
+describe("string reads evaluate once, through evaluateDetails", () => {
+  const native = provider.getClient();
+
+  it.each(["getter.contract.string", "basic.rule.config", "log-level.struct-logger-example"])(
+    "%s matches getStringDetails' value, reason, variant and flagMetadata",
+    async (key) => {
+      const expected = native.getStringDetails(key);
+      expect(expected.value).toBeTypeOf("string");
+      const got = await provider.resolveStringEvaluation(key, "fallback", {}, console as never);
+      expect(got.value).toBe(expected.value);
+      expect(got.reason).toBe(expected.reason);
+      expect(got.variant).toBe(expected.variant);
+      expect(got.flagMetadata).toEqual(expected.flagMetadata);
+      expect(got.errorCode).toBeUndefined();
+    }
+  );
+
+  it.each(["getter.contract.string", "test.duration.PT90S", "test.duration.malformed.30s"])(
+    "%s is evaluated once, with no typed re-read",
+    async (key) => {
+      const untyped = vi.spyOn(native, "evaluateDetails");
+      const typed = vi.spyOn(native, "getStringDetails");
+      try {
+        await client.getStringDetails(key, "fallback");
+        expect(untyped).toHaveBeenCalledTimes(1);
+        expect(typed).not.toHaveBeenCalled();
+      } finally {
+        untyped.mockRestore();
+        typed.mockRestore();
+      }
+    }
+  );
 });

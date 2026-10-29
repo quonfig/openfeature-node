@@ -6,6 +6,16 @@
 as in openfeature-go and -web and the shared OpenFeature cases. 3.x returned your default with
 `TYPE_MISMATCH`. `getNumberValue()` on a duration still returns your default.
 
+Requires `@quonfig/node` 2.1.0: the provider reads the stored text with its new `evaluateDetails()`.
+Raise the peer floor from `>=2.0.0` to `>=2.1.0` and the dev pin from `^2.0.0` to `^2.1.0`.
+
+- The reason, variant and flagMetadata are the evaluation's own: `STATIC`, `TARGETING_MATCH`
+  (`targeting:N`) or `SPLIT` (`split:N`).
+- A stored duration that is not valid ISO 8601 (for example `"30s"`) returns your default with
+  `PARSE_ERROR`, and so does an ENV_VAR-provided duration that does not parse. An unset ENV_VAR
+  still reports `GENERAL`.
+- Each `getStringValue()` evaluates the config once, so it is counted once in telemetry.
+
 ## 3.1.0 - 2026-10-28
 
 A value whose type matches the read but which cannot be parsed now returns your default with reason

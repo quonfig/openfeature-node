@@ -13,8 +13,7 @@ const mockGetNumberDetails = vi.fn();
 const mockGetStringListDetails = vi.fn();
 const mockGetJSONDetails = vi.fn();
 const mockRawConfig = vi.fn();
-const mockGetRawMatch = vi.fn();
-const mockGetDuration = vi.fn();
+const mockEvaluateDetails = vi.fn();
 
 const mockClientInstance = {
   init: mockInit,
@@ -27,8 +26,7 @@ const mockClientInstance = {
   getStringListDetails: mockGetStringListDetails,
   getJSONDetails: mockGetJSONDetails,
   rawConfig: mockRawConfig,
-  getRawMatch: mockGetRawMatch,
-  getDuration: mockGetDuration,
+  evaluateDetails: mockEvaluateDetails,
 };
 
 vi.mock("@quonfig/node", () => {
@@ -156,16 +154,27 @@ describe("QuonfigProvider", () => {
     });
   });
 
+  // A string read evaluates once, through evaluateDetails() (qfg-177f): a
+  // string or log_level config's stored form is the answer.
   describe("resolveStringEvaluation", () => {
     it("returns value and TARGETING_MATCH when SDK reports it", async () => {
-      mockGetStringDetails.mockReturnValue({ value: "hello", reason: "TARGETING_MATCH" });
+      mockEvaluateDetails.mockReturnValue({
+        value: "hello",
+        reason: "TARGETING_MATCH",
+        valueType: "string",
+      });
       const result = await provider.resolveStringEvaluation("my-string", "", {}, {} as any);
       expect(result.value).toBe("hello");
       expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
+      expect(mockGetStringDetails).not.toHaveBeenCalled();
     });
 
     it("returns DEFAULT when SDK reports DEFAULT", async () => {
-      mockGetStringDetails.mockReturnValue({ value: undefined, reason: "DEFAULT" });
+      mockEvaluateDetails.mockReturnValue({
+        value: undefined,
+        reason: "DEFAULT",
+        valueType: "string",
+      });
       const result = await provider.resolveStringEvaluation(
         "missing",
         "default-str",
@@ -177,7 +186,7 @@ describe("QuonfigProvider", () => {
     });
 
     it("returns ERROR + FLAG_NOT_FOUND for missing flag", async () => {
-      mockGetStringDetails.mockReturnValue({
+      mockEvaluateDetails.mockReturnValue({
         value: undefined,
         reason: "ERROR",
         errorCode: "FLAG_NOT_FOUND",
@@ -186,86 +195,106 @@ describe("QuonfigProvider", () => {
       expect(result.value).toBe("fallback");
       expect(result.reason).toBe(StandardResolutionReasons.ERROR);
       expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
+      expect(mockGetStringDetails).not.toHaveBeenCalled();
+    });
+
+    it("returns a numeric log_level as its text, like getStringDetails", async () => {
+      mockEvaluateDetails.mockReturnValue({ value: 5, reason: "STATIC", valueType: "log_level" });
+      const result = await provider.resolveStringEvaluation("lvl", "", {}, {} as any);
+      expect(result.value).toBe("5");
+      expect(result.reason).toBe(StandardResolutionReasons.STATIC);
+    });
+
+    it("reports another type through the typed getter's TYPE_MISMATCH", async () => {
+      mockEvaluateDetails.mockReturnValue({ value: 3, reason: "STATIC", valueType: "int" });
+      mockGetStringDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+        errorMessage: "int is not a string",
+        variant: "default",
+        flagMetadata: { configId: "c1", configType: "CONFIG" },
+      });
+      mockRawConfig.mockReturnValue({ valueType: "int" });
+      const result = await provider.resolveStringEvaluation("n", "fallback", {}, {} as any);
+      expect(result.value).toBe("fallback");
+      expect(result.errorCode).toBe(ErrorCode.TYPE_MISMATCH);
+      expect(result.errorMessage).toBe("int is not a string");
     });
   });
 
   // A duration config reads as its ISO 8601 text (qfg-177f). The stored-text,
-  // STATIC and PARSE_ERROR cases run against real fixtures in
-  // test/integration/parse-error.test.ts; these cover the rule-dependent paths.
+  // STATIC, SPLIT, ENV_VAR and PARSE_ERROR cases also run against real
+  // fixtures in test/integration/parse-error.test.ts.
   describe("resolveStringEvaluation on a duration config", () => {
-    const mismatch = {
-      value: undefined,
-      reason: "ERROR",
-      errorCode: "TYPE_MISMATCH",
-      flagMetadata: { configId: "c1", configType: "CONFIG" },
-    };
-    const durationConfig = (criteria: { operator: string }[]) => ({
-      valueType: "duration",
-      default: { rules: [{ criteria, value: { type: "duration", value: "PT5M" } }] },
-    });
-    const rawMatch = (value: unknown, metadata: object, extra: object = {}) => ({
-      config: { key: "d", type: "duration", value, metadata, ...extra },
-    });
+    const details = (extra: object) => ({ valueType: "duration", ...extra });
 
-    beforeEach(() => {
-      mockGetStringDetails.mockReturnValue(mismatch);
-    });
-
-    it("reports a targeted rule as TARGETING_MATCH with its rule index", async () => {
-      mockRawConfig.mockReturnValue(durationConfig([{ operator: "PROP_IS_ONE_OF" }]));
-      mockGetRawMatch.mockReturnValue(rawMatch("PT5M", { configRowIndex: 0 }));
-      mockGetDuration.mockReturnValue(300000);
+    it("returns the stored text with the evaluation's reason, variant and metadata", async () => {
+      mockEvaluateDetails.mockReturnValue(
+        details({
+          value: "PT5M",
+          reason: "TARGETING_MATCH",
+          variant: "targeting:0",
+          flagMetadata: { configId: "c1", configType: "CONFIG", ruleIndex: 0 },
+        })
+      );
       const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
       expect(result.value).toBe("PT5M");
       expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
       expect(result.variant).toBe("targeting:0");
       expect(result.flagMetadata).toEqual({ configId: "c1", configType: "CONFIG", ruleIndex: 0 });
+      expect(mockGetStringDetails).not.toHaveBeenCalled();
     });
 
-    it("reports a weighted value as SPLIT", async () => {
-      mockRawConfig.mockReturnValue(durationConfig([{ operator: "ALWAYS_TRUE" }]));
-      mockGetRawMatch.mockReturnValue(
-        rawMatch("PT1S", { configRowIndex: 0, weightedValueIndex: 1 })
+    it("returns a malformed stored duration as the default with PARSE_ERROR", async () => {
+      mockEvaluateDetails.mockReturnValue(
+        details({
+          value: "30s",
+          reason: "STATIC",
+          variant: "static",
+          flagMetadata: { configId: "c1", configType: "CONFIG" },
+        })
       );
-      mockGetDuration.mockReturnValue(1000);
       const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
-      expect(result.value).toBe("PT1S");
-      expect(result.reason).toBe(StandardResolutionReasons.SPLIT);
-      expect(result.variant).toBe("split:1");
+      expect(result.value).toBe("PT0S");
+      expect(result.reason).toBe(StandardResolutionReasons.ERROR);
+      expect(result.errorCode).toBe(ErrorCode.PARSE_ERROR);
+      expect(result.variant).toBe("default");
+      expect(result.flagMetadata).toEqual({ configId: "c1", configType: "CONFIG" });
     });
 
-    it("renders an ENV_VAR-provided duration from its resolved milliseconds", async () => {
-      mockRawConfig.mockReturnValue(durationConfig([{ operator: "ALWAYS_TRUE" }]));
-      mockGetRawMatch.mockReturnValue(
-        rawMatch(
-          { source: "ENV_VAR", lookup: "D" },
-          { configRowIndex: 0 },
-          {
-            type: "provided",
-            dependencies: [{ dependencyType: "providedBy", source: "D" }],
-          }
-        )
-      );
-      mockGetDuration.mockReturnValue(1500);
+    it("maps a malformed ENV_VAR duration (TYPE_MISMATCH, no valueType) to PARSE_ERROR", async () => {
+      mockEvaluateDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "TYPE_MISMATCH",
+        variant: "default",
+        flagMetadata: { configId: "c1", configType: "CONFIG" },
+      });
+      mockRawConfig.mockReturnValue({ valueType: "duration" });
       const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
-      expect(result.value).toBe("PT1.5S");
-      expect(result.reason).toBe(StandardResolutionReasons.STATIC);
+      expect(result.value).toBe("PT0S");
+      expect(result.errorCode).toBe(ErrorCode.PARSE_ERROR);
+      expect(mockGetStringDetails).not.toHaveBeenCalled();
     });
 
-    it("returns the default with GENERAL when an ENV_VAR duration does not resolve", async () => {
-      mockRawConfig.mockReturnValue(durationConfig([{ operator: "ALWAYS_TRUE" }]));
-      mockGetRawMatch.mockReturnValue(
-        rawMatch({ source: "ENV_VAR", lookup: "D" }, { configRowIndex: 0 }, { type: "provided" })
-      );
-      mockGetDuration.mockReturnValue(Number.NaN);
+    it("keeps GENERAL when an ENV_VAR duration does not resolve", async () => {
+      mockEvaluateDetails.mockReturnValue({
+        value: undefined,
+        reason: "ERROR",
+        errorCode: "GENERAL",
+        variant: "default",
+      });
+      mockRawConfig.mockReturnValue({ valueType: "duration" });
       const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
       expect(result.value).toBe("PT0S");
       expect(result.errorCode).toBe(ErrorCode.GENERAL);
     });
 
     it("returns the default with DEFAULT when no rule matches", async () => {
-      mockRawConfig.mockReturnValue(durationConfig([{ operator: "PROP_IS_ONE_OF" }]));
-      mockGetRawMatch.mockReturnValue(undefined);
+      mockEvaluateDetails.mockReturnValue(
+        details({ value: undefined, reason: "DEFAULT", variant: "default" })
+      );
       const result = await provider.resolveStringEvaluation("d", "PT0S", {}, {} as any);
       expect(result.value).toBe("PT0S");
       expect(result.reason).toBe(StandardResolutionReasons.DEFAULT);
@@ -406,7 +435,8 @@ describe("QuonfigProvider", () => {
     });
 
     it("forwards variant + flagMetadata + ruleIndex on TARGETING_MATCH", async () => {
-      mockGetStringDetails.mockReturnValue({
+      mockEvaluateDetails.mockReturnValue({
+        valueType: "string",
         value: "v",
         reason: "TARGETING_MATCH",
         variant: "targeting:0",
@@ -418,7 +448,8 @@ describe("QuonfigProvider", () => {
     });
 
     it("forwards variant + weightedValueIndex on SPLIT", async () => {
-      mockGetStringDetails.mockReturnValue({
+      mockEvaluateDetails.mockReturnValue({
+        valueType: "string",
         value: "variant-b",
         reason: "SPLIT",
         variant: "split:1",

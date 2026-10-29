@@ -11,15 +11,13 @@ import {
 } from "@openfeature/server-sdk";
 import { Quonfig } from "@quonfig/node";
 import type {
-  ConfigResponse,
-  Contexts,
   EvaluationDetails,
   QuonfigOptions,
-  RawMatch,
-  Rule,
+  StoredEvaluationDetails,
   ValueType,
 } from "@quonfig/node";
 import { mapContext } from "./context.js";
+import { isIsoDuration } from "./duration.js";
 
 export interface QuonfigProviderOptions extends Omit<QuonfigOptions, "onConfigUpdate"> {
   /**
@@ -132,11 +130,27 @@ export class QuonfigProvider implements Provider {
     _logger: Logger
   ): Promise<ResolutionDetails<string>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
-    const details = this.client.getStringDetails(flagKey, mappedCtx);
-    if (details.errorCode === "TYPE_MISMATCH" && this.declaredValueType(flagKey) === "duration") {
-      return this.resolveDurationAsString(flagKey, mappedCtx, defaultValue, details);
+    // One evaluation per resolution (qfg-177f): evaluateDetails() returns the
+    // stored form, which for a string, log_level or duration config is the
+    // whole answer. A failed read carries no valueType, so the declared one
+    // decides how it maps.
+    const details = this.client.evaluateDetails(flagKey, mappedCtx);
+    const valueType = details.valueType ?? this.declaredValueType(flagKey);
+    if (valueType === "duration") {
+      return this.resolveDurationAsString(flagKey, details, defaultValue);
     }
-    return this.resolve(flagKey, details, defaultValue, STRING_TYPES);
+    if (valueType === undefined || STRING_TYPES.includes(valueType)) {
+      return this.resolve(flagKey, asStringDetails(details), defaultValue, STRING_TYPES);
+    }
+    // Any other type: the typed getter reports the TYPE_MISMATCH (with its
+    // message and once-per-key WARN). It rejects the read at its type check,
+    // before evaluating, so it records no second evaluation in telemetry.
+    return this.resolve(
+      flagKey,
+      this.client.getStringDetails(flagKey, mappedCtx),
+      defaultValue,
+      STRING_TYPES
+    );
   }
 
   async resolveNumberEvaluation(
@@ -201,86 +215,30 @@ export class QuonfigProvider implements Provider {
    * Read a duration config as its stored ISO 8601 text (qfg-177f). OpenFeature
    * has no duration type, so getStringValue() is how you read one, as in
    * openfeature-go and the shared OpenFeature cases. The text comes back as
-   * stored ("PT90S" stays "PT90S"). A stored value that is not valid ISO 8601
-   * is PARSE_ERROR.
-   *
-   * sdk-node's getStringDetails() rejects a duration config before evaluating
-   * it, so this evaluates through public calls: getRawMatch() for the matched
-   * stored value and its rule, and getDuration() to validate it (and to resolve
-   * ENV_VAR-provided or encrypted values, whose text getRawMatch() does not
-   * hold). `mismatch` is the rejected details, which carry the flagMetadata.
+   * stored ("PT90S" stays "PT90S"), with the evaluation's reason, variant and
+   * flagMetadata. evaluateDetails() does not validate it, so a stored value
+   * outside the duration grammar ("30s") is PARSE_ERROR here. A malformed
+   * ENV_VAR value fails inside the SDK as TYPE_MISMATCH, which resolve() also
+   * maps to PARSE_ERROR; an unset ENV_VAR stays GENERAL.
    */
   private resolveDurationAsString(
     flagKey: string,
-    contexts: Contexts,
-    defaultValue: string,
-    mismatch: EvaluationDetails<string>
+    details: StoredEvaluationDetails,
+    defaultValue: string
   ): ResolutionDetails<string> {
-    const metadata = { ...mismatch.flagMetadata } as Record<string, string | number | boolean>;
-    const error = (errorCode: ErrorCode, errorMessage: string): ResolutionDetails<string> => ({
+    const result = this.resolve(flagKey, asStringDetails(details), defaultValue, DURATION_TYPES);
+    if (result.errorCode !== undefined || result.reason === StandardResolutionReasons.DEFAULT) {
+      return result;
+    }
+    if (typeof details.value === "string" && isIsoDuration(details.value)) return result;
+    return {
       value: defaultValue,
       reason: StandardResolutionReasons.ERROR,
-      errorCode,
-      errorMessage,
+      errorCode: ErrorCode.PARSE_ERROR,
+      errorMessage: `Config "${flagKey}" is not a valid ISO 8601 duration`,
+      // Like every ERROR result from sdk-node, which reports variant "default".
       variant: "default",
-      flagMetadata: metadata,
-    });
-    let match: RawMatch | undefined;
-    let config: ConfigResponse | undefined;
-    let ms: number;
-    try {
-      match = this.client.getRawMatch(flagKey, contexts);
-      if (match === undefined) {
-        return {
-          value: defaultValue,
-          reason: StandardResolutionReasons.DEFAULT,
-          variant: "default",
-          flagMetadata: metadata,
-        };
-      }
-      config = this.client.rawConfig(flagKey);
-      ms = this.client.getDuration(flagKey, contexts, Number.NaN);
-    } catch (err) {
-      return error(ErrorCode.GENERAL, err instanceof Error ? err.message : String(err));
-    }
-    const raw = match.config;
-    const storedText =
-      raw.type === "duration" &&
-      typeof raw.value === "string" &&
-      !raw.confidential &&
-      !raw.dependencies?.length
-        ? raw.value
-        : undefined;
-    if (Number.isNaN(ms)) {
-      // A plain stored value that did not parse is malformed. One resolved
-      // through an env var or decryption may also be unset or undecryptable.
-      return storedText !== undefined
-        ? error(ErrorCode.PARSE_ERROR, `Config "${flagKey}" is not a valid ISO 8601 duration`)
-        : error(ErrorCode.GENERAL, `Config "${flagKey}" did not resolve to a valid duration`);
-    }
-
-    const ruleIndex = raw.metadata.configRowIndex;
-    const splitIndex = raw.metadata.weightedValueIndex;
-    let reason: string;
-    let variant: string;
-    if (splitIndex !== undefined) {
-      reason = StandardResolutionReasons.SPLIT;
-      variant = `split:${splitIndex}`;
-      Object.assign(metadata, { ruleIndex, weightedValueIndex: splitIndex });
-    } else if (ruleIndex === 0 && config !== undefined && !hasTargetingRules(config)) {
-      reason = StandardResolutionReasons.STATIC;
-      variant = "static";
-    } else {
-      reason = StandardResolutionReasons.TARGETING_MATCH;
-      variant = `targeting:${ruleIndex}`;
-      Object.assign(metadata, { ruleIndex });
-    }
-    return {
-      // Text we cannot see (ENV_VAR, encrypted) is rendered from the resolved ms.
-      value: storedText ?? `PT${ms / 1000}S`,
-      reason,
-      variant,
-      flagMetadata: metadata,
+      flagMetadata: details.flagMetadata as ResolutionDetails<string>["flagMetadata"],
     };
   }
 
@@ -307,15 +265,17 @@ const BOOL_TYPES: readonly ValueType[] = ["bool"];
 const STRING_TYPES: readonly ValueType[] = ["string", "log_level"];
 const NUMBER_TYPES: readonly ValueType[] = ["int", "double"];
 const OBJECT_TYPES: readonly ValueType[] = ["string_list", "json"];
+// A duration read as a string (qfg-177f): a TYPE_MISMATCH on one is malformed.
+const DURATION_TYPES: readonly ValueType[] = ["duration"];
 
 /**
- * Whether a config has a rule that can fail to match: what makes a rule-0 match
- * TARGETING_MATCH rather than STATIC. This mirrors sdk-node's own reason check.
+ * evaluateDetails()' stored form as a string read. A log_level may be stored
+ * as its number, which getStringDetails() returns as text, so do the same.
  */
-function hasTargetingRules(config: ConfigResponse): boolean {
-  const targets = (rules: Rule[] | undefined) =>
-    (rules ?? []).some((rule) => rule.criteria.some((c) => c.operator !== "ALWAYS_TRUE"));
-  return targets(config.default.rules) || targets(config.environment?.rules);
+function asStringDetails(details: StoredEvaluationDetails): EvaluationDetails<string> {
+  const { valueType: _valueType, ...rest } = details;
+  const value = typeof rest.value === "number" ? String(rest.value) : rest.value;
+  return { ...rest, value } as EvaluationDetails<string>;
 }
 
 /**
