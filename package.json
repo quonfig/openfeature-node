@@ -1,6 +1,6 @@
 {
   "name": "@quonfig/openfeature-node",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "OpenFeature provider for Quonfig -- Node.js",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -13,7 +13,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rm -rf dist/ && npx tsup",
     "test": "vitest run --exclude test/conformance/**",
@@ -25,11 +27,11 @@
     "version": "prettier --write CHANGELOG.md README.md && git add CHANGELOG.md README.md"
   },
   "peerDependencies": {
-    "@quonfig/node": ">=2.1.0",
+    "@quonfig/node": ">=2.2.0",
     "@openfeature/server-sdk": ">=1.0.0"
   },
   "devDependencies": {
-    "@quonfig/node": "^2.1.0",
+    "@quonfig/node": "^2.2.0",
     "@openfeature/server-sdk": "^1.7.0",
     "@types/node": "^26.6.5",
     "prettier": "^3.0.0",
@@ -37,7 +39,9 @@
     "typescript": "^5.3.0",
     "vitest": "^5.0.4"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Quonfig",
   "license": "MIT",
   "repository": {

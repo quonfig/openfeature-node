@@ -120,7 +120,7 @@ export class QuonfigProvider implements Provider {
   ): Promise<ResolutionDetails<boolean>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getBoolDetails(flagKey, mappedCtx);
-    return this.resolve(flagKey, details, defaultValue, BOOL_TYPES);
+    return toResolutionDetails(details, defaultValue);
   }
 
   async resolveStringEvaluation(
@@ -140,17 +140,12 @@ export class QuonfigProvider implements Provider {
       return this.resolveDurationAsString(flagKey, details, defaultValue);
     }
     if (valueType === undefined || STRING_TYPES.includes(valueType)) {
-      return this.resolve(flagKey, asStringDetails(details), defaultValue, STRING_TYPES);
+      return toResolutionDetails(asStringDetails(details), defaultValue);
     }
     // Any other type: the typed getter reports the TYPE_MISMATCH (with its
     // message and once-per-key WARN). It rejects the read at its type check,
     // before evaluating, so it records no second evaluation in telemetry.
-    return this.resolve(
-      flagKey,
-      this.client.getStringDetails(flagKey, mappedCtx),
-      defaultValue,
-      STRING_TYPES
-    );
+    return toResolutionDetails(this.client.getStringDetails(flagKey, mappedCtx), defaultValue);
   }
 
   async resolveNumberEvaluation(
@@ -161,7 +156,7 @@ export class QuonfigProvider implements Provider {
   ): Promise<ResolutionDetails<number>> {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     const details = this.client.getNumberDetails(flagKey, mappedCtx);
-    return this.resolve(flagKey, details, defaultValue, NUMBER_TYPES);
+    return toResolutionDetails(details, defaultValue);
   }
 
   async resolveObjectEvaluation<T extends JsonValue>(
@@ -173,7 +168,7 @@ export class QuonfigProvider implements Provider {
     const mappedCtx = mapContext(context, this.targetingKeyMapping);
     // Try string_list first (returns string[]), fall back to JSON.
     const listDetails = this.client.getStringListDetails(flagKey, mappedCtx);
-    // A malformed string_list (PARSE_ERROR from a newer sdk-node, qfg-wg1n)
+    // A malformed string_list (PARSE_ERROR, qfg-wg1n)
     // is the answer too: the JSON read would only add a TYPE_MISMATCH.
     if (
       listDetails.reason === "STATIC" ||
@@ -187,35 +182,7 @@ export class QuonfigProvider implements Provider {
       );
     }
     const jsonDetails = this.client.getJSONDetails(flagKey, mappedCtx);
-    return this.resolve(flagKey, jsonDetails as EvaluationDetails<T>, defaultValue, OBJECT_TYPES);
-  }
-
-  /**
-   * Translate native details, telling a malformed value apart from a wrong-type
-   * read (qfg-9xsl). sdk-node's `*Details` getters report both as
-   * `TYPE_MISMATCH`, but a wrong-type read fails its check against the config's
-   * declared `valueType` before evaluating. So a `TYPE_MISMATCH` on a config
-   * whose declared type this read accepts means the value itself did not parse
-   * (a stored int "twelve", an ENV_VAR int set to "twelve"): `PARSE_ERROR`.
-   *
-   * A newer sdk-node reports such a value as `PARSE_ERROR` itself (qfg-wg1n);
-   * toResolutionDetails() passes that straight through, so the remap below only
-   * matters for an sdk-node that still says `TYPE_MISMATCH`.
-   */
-  private resolve<T>(
-    flagKey: string,
-    details: EvaluationDetails<T>,
-    defaultValue: T,
-    readTypes: readonly ValueType[]
-  ): ResolutionDetails<T> {
-    const result = toResolutionDetails(details, defaultValue);
-    if (result.errorCode === ErrorCode.TYPE_MISMATCH) {
-      const valueType = this.declaredValueType(flagKey);
-      if (valueType !== undefined && readTypes.includes(valueType)) {
-        result.errorCode = ErrorCode.PARSE_ERROR;
-      }
-    }
-    return result;
+    return toResolutionDetails(jsonDetails as EvaluationDetails<T>, defaultValue);
   }
 
   /**
@@ -225,16 +192,15 @@ export class QuonfigProvider implements Provider {
    * stored ("PT90S" stays "PT90S"), with the evaluation's reason, variant and
    * flagMetadata. evaluateDetails() does not validate it, so a stored value
    * outside the duration grammar ("30s") is PARSE_ERROR here. A malformed
-   * ENV_VAR value fails inside the SDK as PARSE_ERROR (a newer sdk-node) or
-   * TYPE_MISMATCH (sdk-node 2.1.0, which resolve() maps to PARSE_ERROR); an
-   * unset ENV_VAR stays GENERAL.
+   * ENV_VAR value fails inside the SDK as PARSE_ERROR; an unset ENV_VAR stays
+   * GENERAL.
    */
   private resolveDurationAsString(
     flagKey: string,
     details: StoredEvaluationDetails,
     defaultValue: string
   ): ResolutionDetails<string> {
-    const result = this.resolve(flagKey, asStringDetails(details), defaultValue, DURATION_TYPES);
+    const result = toResolutionDetails(asStringDetails(details), defaultValue);
     if (result.errorCode !== undefined || result.reason === StandardResolutionReasons.DEFAULT) {
       return result;
     }
@@ -267,14 +233,8 @@ export class QuonfigProvider implements Provider {
   }
 }
 
-// The declared valueTypes each OpenFeature read accepts; these mirror sdk-node's
-// own check of the requested type against a config's valueType.
-const BOOL_TYPES: readonly ValueType[] = ["bool"];
+// The declared valueTypes a string read returns as stored (qfg-177f).
 const STRING_TYPES: readonly ValueType[] = ["string", "log_level"];
-const NUMBER_TYPES: readonly ValueType[] = ["int", "double"];
-const OBJECT_TYPES: readonly ValueType[] = ["string_list", "json"];
-// A duration read as a string (qfg-177f): a TYPE_MISMATCH on one is malformed.
-const DURATION_TYPES: readonly ValueType[] = ["duration"];
 
 /**
  * evaluateDetails()' stored form as a string read. A log_level may be stored
@@ -295,9 +255,9 @@ function asStringDetails(details: StoredEvaluationDetails): EvaluationDetails<st
  *   SPLIT            → StandardResolutionReasons.SPLIT
  *   DEFAULT          → defaultValue + StandardResolutionReasons.DEFAULT
  *   ERROR            → defaultValue + ERROR + errorCode (FLAG_NOT_FOUND / TYPE_MISMATCH /
- *                      PARSE_ERROR / PROVIDER_NOT_READY / GENERAL; QuonfigProvider.resolve
- *                      refines a malformed value's TYPE_MISMATCH to PARSE_ERROR for an
- *                      sdk-node that does not report PARSE_ERROR itself)
+ *                      PARSE_ERROR / PROVIDER_NOT_READY / GENERAL, passed straight
+ *                      through: sdk-node >= 2.2.0 reports a malformed value as
+ *                      PARSE_ERROR and a wrong-type read as TYPE_MISMATCH, qfg-wg1n)
  */
 function toResolutionDetails<T>(
   details: EvaluationDetails<T>,
@@ -336,23 +296,15 @@ function toResolutionDetails<T>(
       return {
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
-        errorCode: toOFErrorCode(sdkErrorCode(details as EvaluationDetails<unknown>)),
+        errorCode: toOFErrorCode(details.errorCode),
         errorMessage: details.errorMessage,
         ...common,
       };
   }
 }
 
-/**
- * sdk-node's error code, widened to string: sdk-node 2.1.0's union has no
- * PARSE_ERROR, and a newer one reports it for a malformed value (qfg-wg1n).
- */
-function sdkErrorCode(details: EvaluationDetails<unknown>): string | undefined {
-  return details.errorCode as string | undefined;
-}
-
 function isParseError(details: EvaluationDetails<unknown>): boolean {
-  return details.reason === "ERROR" && sdkErrorCode(details) === "PARSE_ERROR";
+  return details.reason === "ERROR" && details.errorCode === "PARSE_ERROR";
 }
 
 function toOFErrorCode(code: string | undefined): ErrorCode {

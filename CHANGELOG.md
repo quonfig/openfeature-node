@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.4.0 - 2026-11-12
+
+Requires `@quonfig/node` 2.2.0, the first release that reports a malformed value as `PARSE_ERROR`
+itself (qfg-ln7d). The peer floor moves from `>=2.1.0` to `>=2.2.0` and the dev pin from `^2.1.0` to
+`^2.2.0`. This is a minor release because a runtime floor moved.
+
+- The provider no longer compares a `TYPE_MISMATCH` with the config's declared type to decide
+  whether it was really a malformed value. That workaround existed only for sdk-node 2.1.0. The
+  SDK's `PARSE_ERROR` and `TYPE_MISMATCH` now pass straight through as OpenFeature `PARSE_ERROR` and
+  `TYPE_MISMATCH`.
+- With sdk-node 2.2.0 or later, results are the same as in 3.3.0: a malformed value is `PARSE_ERROR`
+  and a wrong-type read is `TYPE_MISMATCH`.
+
 ## 3.3.0 - 2026-10-29
 
 When `@quonfig/node` reports `PARSE_ERROR` for a malformed value, the provider now returns it as
