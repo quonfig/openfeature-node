@@ -263,11 +263,11 @@ describe("QuonfigProvider", () => {
       expect(result.flagMetadata).toEqual({ configId: "c1", configType: "CONFIG" });
     });
 
-    it("maps a malformed ENV_VAR duration (TYPE_MISMATCH, no valueType) to PARSE_ERROR", async () => {
+    it("passes a malformed ENV_VAR duration's SDK PARSE_ERROR (no valueType) through", async () => {
       mockEvaluateDetails.mockReturnValue({
         value: undefined,
         reason: "ERROR",
-        errorCode: "TYPE_MISMATCH",
+        errorCode: "PARSE_ERROR",
         variant: "default",
         flagMetadata: { configId: "c1", configType: "CONFIG" },
       });
@@ -570,6 +570,34 @@ describe("QuonfigProvider", () => {
       expect(result.value).toEqual({ d: 1 });
       expectParseError(result);
     });
+
+    // qfg-ln7d: sdk-node >= 2.2.0 reports a malformed value as PARSE_ERROR, so
+    // the provider no longer second-guesses a TYPE_MISMATCH by comparing the
+    // declared valueType. A TYPE_MISMATCH from the SDK stays TYPE_MISMATCH,
+    // even when the declared type is one this read accepts.
+    it.each([
+      [
+        "boolean",
+        "bool",
+        () => provider.resolveBooleanEvaluation("k", false, {}, {} as any),
+        mockGetBoolDetails,
+      ],
+      [
+        "number",
+        "int",
+        () => provider.resolveNumberEvaluation("k", 0, {}, {} as any),
+        mockGetNumberDetails,
+      ],
+    ] as const)(
+      "passes an SDK TYPE_MISMATCH on a %s read through, whatever the declared type",
+      async (_name, valueType, read, mock) => {
+        mock.mockReturnValue({ value: undefined, reason: "ERROR", errorCode: "TYPE_MISMATCH" });
+        mockRawConfig.mockReturnValue({ valueType });
+        const result = await read();
+        expect(result.errorCode).toBe(ErrorCode.TYPE_MISMATCH);
+        expect(mockRawConfig).not.toHaveBeenCalled();
+      }
+    );
 
     it("still reports TYPE_MISMATCH for a wrong-type read", async () => {
       mockGetBoolDetails.mockReturnValue({
